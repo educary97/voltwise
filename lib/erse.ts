@@ -68,7 +68,7 @@ function parseCSV(csv: string): ERSEOffer[] {
       id: i+1,
       provider:          get(cols,"Comercializador"),
       name:              get(cols,"Nome da Oferta"),
-      type:              get(cols,"Tipo de Oferta").toLowerCase().includes("index")?"indexed":"fixed",
+      type:              get(cols,"Tipo de Oferta").toLowerCase().includes("index")?"indexed":"fixed" as "fixed"|"indexed",
       green:             get(cols,"Energia Renovável").toLowerCase()==="sim",
       pricePerKwh:       parseFloat(get(cols,"Preço Energia (€/kWh)").replace(",","."))||0.165,
       fixedMonthly:      parseFloat(get(cols,"Termo Fixo (€/mês)").replace(",","."))||0,
