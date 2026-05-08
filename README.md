@@ -7,7 +7,7 @@ powered by ERSE official data and Claude AI (OCR + recommendation engine).
 
 ## How it works
 
-1. User uploads their BPI electricity invoice (PDF or image)
+1. User uploads their electricity invoice (PDF or image)
 2. Claude (claude-sonnet-4-6 vision) extracts supplier, power, consumption, and bill total
 3. App fetches live offer data from the ERSE official CSV feed
 4. Comparison engine calculates monthly estimates for all ~15 suppliers
