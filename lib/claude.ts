@@ -41,7 +41,7 @@ export async function extractInvoice(
         ];
 
   const res = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-5",
     max_tokens: 600,
     system: "You are an expert at reading Portuguese electricity invoices. Return only valid JSON.",
     messages: [{ role:"user", content }],
@@ -76,7 +76,7 @@ export async function getRecommendation(
   const prompt = `A Portuguese household with ${supplier||"unknown supplier"} pays €${monthlyBill.toFixed(2)}/month for ${kwhMonth} kWh at ${powerKva} kVA (€${(monthlyBill*12).toFixed(0)}/year). Top 3 ERSE offers: ${top3}. Write exactly 2 sentences in English: (1) best saving opportunity with exact figure, (2) practical tip about switching in Portugal (5 business days, new supplier handles everything). Be direct and specific.`;
   try {
     const res = await client.messages.create({
-      model:"claude-sonnet-4-20250514", max_tokens:150,
+      model:"claude-sonnet-4-5", max_tokens:150,
       messages:[{role:"user",content:prompt}],
     });
     return (res.content.find(b=>b.type==="text") as Anthropic.TextBlock|undefined)?.text ?? "";
