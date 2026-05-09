@@ -62,21 +62,21 @@ function parseCSV(csv: string): ERSEOffer[] {
   if (lines.length < 2) return [];
   const headers = lines[0].split(";").map(h => h.trim().replace(/"/g,""));
   const get = (cols: string[], h: string) => { const i = headers.indexOf(h); return i>=0?cols[i]:""; };
-  return lines.slice(1).map((line, i) => {
+  return (lines.slice(1).map((line, i) => {
     const cols = line.split(";").map(c => c.trim().replace(/"/g,""));
     return {
       id: i+1,
       provider:          get(cols,"Comercializador"),
       name:              get(cols,"Nome da Oferta"),
-      type:              get(cols,"Tipo de Oferta").toLowerCase().includes("index")?"indexed":"fixed",
+      type:              get(cols,"Tipo de Oferta").toLowerCase().includes("index")?"indexed":"fixed" as "fixed"|"indexed",
       green:             get(cols,"Energia Renovável").toLowerCase()==="sim",
       pricePerKwh:       parseFloat(get(cols,"Preço Energia (€/kWh)").replace(",","."))||0.165,
       fixedMonthly:      parseFloat(get(cols,"Termo Fixo (€/mês)").replace(",","."))||0,
       firstYearDiscount: parseFloat(get(cols,"Desconto 1º Ano (%)").replace(",","."))/100||0,
-      tags:              [],
+      tags:              [] as string[],
       contactUrl:        get(cols,"URL Contacto")||"https://www.erse.pt",
     };
-  }).filter(o => o.provider);
+  }) as ERSEOffer[]).filter(o => o.provider);
 }
 
 export const FALLBACK_OFFERS: ERSEOffer[] = [
