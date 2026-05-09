@@ -1,24 +1,36 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 
 function ApprovePageInner() {
   const searchParams = useSearchParams();
   const data = searchParams.get("data");
   const sig = searchParams.get("sig");
+
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  const [draft, setDraft] = useState<{ subject: string; body: string; to: string } | null>(null);
+  const [draftLoading, setDraftLoading] = useState(true);
 
   let payload: any = null;
-  let decodeError = "";
   if (data) {
     try {
       payload = JSON.parse(atob(data.replace(/-/g, "+").replace(/_/g, "/")));
-    } catch {
-      decodeError = "Could not decode approval link. It may be corrupted.";
-    }
+    } catch {}
   }
+
+  useEffect(() => {
+    if (!data || !sig) { setDraftLoading(false); return; }
+    fetch("/api/agent/draft", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data, sig }),
+    })
+      .then(r => r.json())
+      .then(json => { setDraft(json.draft); setDraftLoading(false); })
+      .catch(() => setDraftLoading(false));
+  }, [data, sig]);
 
   async function handleConfirm() {
     setStatus("sending");
@@ -39,10 +51,9 @@ function ApprovePageInner() {
   }
 
   if (!data || !sig) return <ErrorState message="Link inválido." />;
-  if (decodeError) return <ErrorState message={decodeError} />;
   if (!payload) return <ErrorState message="Não foi possível carregar os dados." />;
 
-  const { email, comparison, createdAt } = payload;
+  const { comparison, createdAt } = payload;
   const created = new Date(createdAt);
 
   return (
@@ -60,11 +71,11 @@ function ApprovePageInner() {
 
       <div style={{ maxWidth: 680, margin: "0 auto", padding: "32px 24px" }}>
         {status === "sent" ? (
-          <SuccessState sentTo={email.to} supplier={comparison.bestSupplier} />
+          <SuccessState sentTo={draft?.to ?? ""} supplier={comparison.bestSupplier} />
         ) : (
           <>
             <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Oportunidade de poupança encontrada</h1>
-            <p style={{ color: "#888", fontSize: 14, marginBottom: 24 }}>O agente Voltwise analisou o mercado e encontrou uma oferta melhor. Revê o resumo e confirma para enviar o pedido de mudança.</p>
+            <p style={{ color: "#888", fontSize: 14, marginBottom: 24 }}>Revê o resumo e confirma para enviar o pedido de mudança.</p>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
               <Card label="Plano atual" value={`€${Number(comparison.currentMonthlyCost).toFixed(2)}/mês`} sub="Fornecedor atual" accent="#ef4444" />
@@ -84,19 +95,27 @@ function ApprovePageInner() {
 
             <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16, color: "#aaa" }}>📧 RASCUNHO DO EMAIL</h2>
             <div style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: 12, overflow: "hidden", marginBottom: 32 }}>
-              <div style={{ padding: "14px 20px", borderBottom: "1px solid #1e1e2e", fontSize: 13 }}>
-                <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
-                  <span style={{ color: "#555", minWidth: 50 }}>Para:</span>
-                  <span style={{ color: "#f5c842" }}>{email.to}</span>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <span style={{ color: "#555", minWidth: 50 }}>Assunto:</span>
-                  <span style={{ color: "#e8e8f0" }}>{email.subject}</span>
-                </div>
-              </div>
-              <div style={{ padding: "20px", fontFamily: "Georgia, serif", fontSize: 14, lineHeight: 1.7, color: "#ccc", whiteSpace: "pre-wrap" }}>
-                {email.body}
-              </div>
+              {draftLoading ? (
+                <div style={{ padding: 24, color: "#555", fontSize: 14 }}>A gerar rascunho...</div>
+              ) : draft ? (
+                <>
+                  <div style={{ padding: "14px 20px", borderBottom: "1px solid #1e1e2e", fontSize: 13 }}>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                      <span style={{ color: "#555", minWidth: 50 }}>Para:</span>
+                      <span style={{ color: "#f5c842" }}>{draft.to}</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <span style={{ color: "#555", minWidth: 50 }}>Assunto:</span>
+                      <span style={{ color: "#e8e8f0" }}>{draft.subject}</span>
+                    </div>
+                  </div>
+                  <div style={{ padding: "20px", fontFamily: "Georgia, serif", fontSize: 14, lineHeight: 1.7, color: "#ccc", whiteSpace: "pre-wrap" }}>
+                    {draft.body}
+                  </div>
+                </>
+              ) : (
+                <div style={{ padding: 24, color: "#555", fontSize: 14 }}>Não foi possível gerar o rascunho.</div>
+              )}
             </div>
 
             {status === "error" && (
@@ -116,7 +135,7 @@ function ApprovePageInner() {
               </button>
             </div>
             <p style={{ fontSize: 12, color: "#444", marginTop: 16, textAlign: "center" }}>
-              Ao confirmar, o email será enviado em teu nome para {email.to}. O novo fornecedor trata da rescisão do contrato atual.
+              Ao confirmar, o email será enviado em teu nome. O novo fornecedor trata da rescisão do contrato atual.
             </p>
           </>
         )}

@@ -1,8 +1,6 @@
 import crypto from "crypto";
-import { DraftedEmail } from "./draftSwitchEmail";
 
 export interface ApprovalPayload {
-  email: DraftedEmail;
   comparison: {
     currentMonthlyCost: number;
     bestSupplier: string;
@@ -10,6 +8,7 @@ export interface ApprovalPayload {
     estimatedMonthlyEur: number;
     savingsPerMonth: number;
     savingsPerYear: number;
+    supplierEmail: string;
   };
   createdAt: string;
 }

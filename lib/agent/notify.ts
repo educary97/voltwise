@@ -11,38 +11,28 @@ export async function sendWhatsAppAlert(
   bestPlan: string,
   bestMonthlyEur: number
 ): Promise<void> {
-  const message = [
+  const summary = [
     `⚡ *Voltwise — Poupança encontrada!*`,
-    ``,
     `De: ${currentSupplier} (€${currentMonthlyCost.toFixed(2)}/mês)`,
-    `Para: ${bestSupplier} - ${bestPlan} (€${bestMonthlyEur.toFixed(2)}/mês)`,
-    ``,
-    `💰 Poupa €${savingsPerMonth.toFixed(2)}/mês (€${savingsPerYear.toFixed(2)}/ano)`,
-    ``,
-    `Aprova aqui: ${approvalUrl}`,
+    `Para: ${bestSupplier} (€${bestMonthlyEur.toFixed(2)}/mês)`,
+    `💰 Poupa €${savingsPerMonth.toFixed(2)}/mês`,
+    `A enviar link de aprovação...`,
   ].join("\n");
 
+  const auth = "Basic " + Buffer.from(`${config.twilioAccountSid}:${config.twilioAuthToken}`).toString("base64");
   const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${config.twilioAccountSid}/Messages.json`;
 
-  const body = new URLSearchParams({
-    From: config.twilioWhatsappFrom,
-    To:   config.notifyWhatsappTo,
-    Body: message,
-  });
-
-  const response = await fetch(twilioUrl, {
+  // Send summary message
+  await fetch(twilioUrl, {
     method: "POST",
-    headers: {
-      Authorization:
-        "Basic " +
-        Buffer.from(`${config.twilioAccountSid}:${config.twilioAuthToken}`).toString("base64"),
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: body.toString(),
+    headers: { Authorization: auth, "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ From: config.twilioWhatsappFrom, To: config.notifyWhatsappTo, Body: summary }).toString(),
   });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Twilio WhatsApp send failed: ${response.status} ${error}`);
-  }
+  // Send approval URL in separate message
+  await fetch(twilioUrl, {
+    method: "POST",
+    headers: { Authorization: auth, "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ From: config.twilioWhatsappFrom, To: config.notifyWhatsappTo, Body: approvalUrl }).toString(),
+  });
 }

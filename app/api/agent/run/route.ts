@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAgentConfig } from "@/lib/agentConfig";
 import { compareToCurrentPlan } from "@/lib/agent/compareToCurrentPlan";
-import { draftSwitchEmail } from "@/lib/agent/draftSwitchEmail";
 import { buildApprovalUrl, ApprovalPayload } from "@/lib/agent/approvalToken";
 import { sendWhatsAppAlert } from "@/lib/agent/notify";
 
@@ -29,10 +28,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const draft = await draftSwitchEmail(config, comparison.bestOffer);
-
     const payload: ApprovalPayload = {
-      email: draft,
       comparison: {
         currentMonthlyCost:  comparison.currentMonthlyCost,
         bestSupplier:        comparison.bestOffer.supplier,
@@ -40,6 +36,7 @@ export async function POST(req: NextRequest) {
         estimatedMonthlyEur: comparison.bestOffer.estimatedMonthlyEur,
         savingsPerMonth:     comparison.savingsPerMonth,
         savingsPerYear:      comparison.savingsPerYear,
+        supplierEmail:       comparison.bestOffer.supplierEmail ?? "",
       },
       createdAt: new Date().toISOString(),
     };
@@ -63,8 +60,6 @@ export async function POST(req: NextRequest) {
       bestOffer: comparison.bestOffer,
       savingsPerMonth: comparison.savingsPerMonth,
       savingsPerYear: comparison.savingsPerYear,
-      draftTo: draft.to,
-      draftSubject: draft.subject,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message ?? "Internal server error" }, { status: 500 });

@@ -24,7 +24,6 @@ export async function POST(req: NextRequest) {
 
     const { comparison } = payload;
 
-    // Regenerate the email draft now (not stored in URL)
     const bestOffer = {
       supplier:            comparison.bestSupplier,
       plan:                comparison.bestPlan,
@@ -35,29 +34,8 @@ export async function POST(req: NextRequest) {
 
     const draft = await draftSwitchEmail(config, bestOffer);
 
-    const resendRes = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from:     `Voltwise <${config.notifyToEmail}>`,
-        to:       [draft.to],
-        reply_to: config.userEmail,
-        subject:  draft.subject,
-        text:     draft.body,
-      }),
-    });
-
-    if (!resendRes.ok) {
-      const error = await resendRes.text();
-      throw new Error(`Resend failed: ${resendRes.status} ${error}`);
-    }
-
-    const resendData = await resendRes.json();
-    return NextResponse.json({ success: true, emailId: resendData.id, sentTo: draft.to });
+    return NextResponse.json({ draft });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message ?? "Failed to send email" }, { status: 500 });
+    return NextResponse.json({ error: err.message ?? "Failed to generate draft" }, { status: 500 });
   }
 }
