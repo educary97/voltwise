@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 type Step = "upload"|"form"|"loading"|"results";
 const POWERS = [1.15,2.3,3.45,4.6,5.75,6.9,10.35,13.8,17.25,20.7];
@@ -29,6 +30,7 @@ const s = {
   dropSub: { fontSize:13, color:"#aaa" } as React.CSSProperties,
   manualLink: { display:"block", textAlign:"center" as const, padding:12, fontSize:14, color:"#6abf69", fontWeight:500, cursor:"pointer" } as React.CSSProperties,
   extractBanner: { background:"#f0faf0", border:"1px solid #c8e6c8", borderRadius:14, padding:"14px 18px", display:"flex", gap:10, alignItems:"flex-start", marginBottom:20, fontSize:14, color:"#3a7a3a", lineHeight:1.5 } as React.CSSProperties,
+  userBanner: { background:"#1a1a1a", borderRadius:16, padding:"16px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 } as React.CSSProperties,
   card: { background:"white", border:"1px solid #e8e6df", borderRadius:20, padding:24, marginBottom:14 } as React.CSSProperties,
   cardTitle: { fontSize:11, fontWeight:600, color:"#bbb", textTransform:"uppercase" as const, letterSpacing:"0.08em", marginBottom:20 } as React.CSSProperties,
   formGrid: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 } as React.CSSProperties,
@@ -93,18 +95,43 @@ function FilterBtn({label,active,onClick}:{label:string,active:boolean,onClick:(
 }
 
 export default function Home() {
-  const [step,       setStep]       = useState<Step>("upload");
-  const [extracted,  setExtracted]  = useState<Record<string,unknown>>({});
-  const [extractMsg, setExtractMsg] = useState("");
-  const [form,       setForm]       = useState({supplier:"",powerKva:6.9,kwhMonth:"",bill:"",tariff:"simple",peak:"",offpeak:""});
-  const [results,    setResults]    = useState<any>(null);
-  const [loadMsg,    setLoadMsg]    = useState("");
-  const [expanded,   setExpanded]   = useState<Set<number>>(new Set());
-  const [filter,     setFilter]     = useState("all");
-  const [dragOver,   setDragOver]   = useState(false);
-  const [visible,    setVisible]    = useState(false);
+  const router = useRouter();
+  const [step,        setStep]        = useState<Step>("upload");
+  const [extracted,   setExtracted]   = useState<Record<string,unknown>>({});
+  const [extractMsg,  setExtractMsg]  = useState("");
+  const [form,        setForm]        = useState({supplier:"",powerKva:6.9,kwhMonth:"",bill:"",tariff:"simple",peak:"",offpeak:""});
+  const [results,     setResults]     = useState<any>(null);
+  const [loadMsg,     setLoadMsg]     = useState("");
+  const [expanded,    setExpanded]    = useState<Set<number>>(new Set());
+  const [filter,      setFilter]      = useState("all");
+  const [dragOver,    setDragOver]    = useState(false);
+  const [visible,     setVisible]     = useState(false);
+  const [userName,    setUserName]    = useState<string|null>(null);
+  const [userPrefilled, setUserPrefilled] = useState(false);
 
-  useEffect(()=>{setTimeout(()=>setVisible(true),50);},[]);
+  useEffect(()=>{
+    setTimeout(()=>setVisible(true),50);
+    // Check if returning agent user
+    const email = localStorage.getItem("voltwise_user_email");
+    if (email) {
+      fetch(`/api/user?email=${encodeURIComponent(email)}`)
+        .then(r=>r.json())
+        .then(data=>{
+          if (data.found) {
+            setUserName(data.name?.split(" ")[0] ?? null);
+            setForm(f=>({
+              ...f,
+              supplier:  data.currentSupplier ?? f.supplier,
+              powerKva:  data.powerKva        ?? f.powerKva,
+              kwhMonth:  data.monthlyKwh      ? String(data.monthlyKwh)  : f.kwhMonth,
+              bill:      data.monthlyCost     ? String(data.monthlyCost) : f.bill,
+            }));
+            setUserPrefilled(true);
+          }
+        })
+        .catch(()=>{});
+    }
+  },[]);
 
   const toggle=(id:number)=>setExpanded(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
 
@@ -151,7 +178,10 @@ export default function Home() {
         {/* Header */}
         <div style={s.header}>
           <div style={s.logo}>Voltwise<span style={s.logoSpan}>.</span></div>
-          <div style={s.badge}>ERSE official data</div>
+          <div style={{display:"flex",gap:10,alignItems:"center"}}>
+            {userName && <span style={{fontSize:13,color:"#888"}}>👋 {userName}</span>}
+            <div style={s.badge}>ERSE official data</div>
+          </div>
         </div>
 
         {/* Steps */}
@@ -170,10 +200,22 @@ export default function Home() {
         {/* UPLOAD */}
         {step==="upload"&&(
           <div>
+            {/* Returning user banner */}
+            {userPrefilled && userName && (
+              <div style={s.userBanner}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:600,color:"white",marginBottom:3}}>Welcome back, {userName}!</div>
+                  <div style={{fontSize:12,color:"#666"}}>Your details are pre-filled. Upload a new bill or compare directly.</div>
+                </div>
+                <button onClick={()=>setStep("form")} style={{padding:"8px 16px",background:"#6abf69",color:"white",border:"none",borderRadius:10,fontSize:13,fontWeight:600,fontFamily:"inherit",cursor:"pointer",whiteSpace:"nowrap"}}>Compare now →</button>
+              </div>
+            )}
+
             <div style={s.uploadHero}>
               <h1 style={s.title}>Find out how much you could <span style={s.titleGreen}>save</span> on electricity</h1>
               <p style={s.sub}>Upload your bill and we compare every offer in Portugal using official ERSE data — in seconds.</p>
             </div>
+
             <label style={s.dropZone(dragOver)}
               onDragOver={e=>{e.preventDefault();setDragOver(true);}}
               onDragLeave={()=>setDragOver(false)}
@@ -196,21 +238,27 @@ export default function Home() {
                 <span><strong>Invoice read.</strong> {extractMsg} Check the details below.</span>
               </div>
             )}
+            {userPrefilled&&!extractMsg&&(
+              <div style={s.extractBanner}>
+                <span>👤</span>
+                <span><strong>Details pre-filled</strong> from your agent profile. Adjust if needed.</span>
+              </div>
+            )}
             <div style={s.card}>
               <div style={s.cardTitle}>Your current contract</div>
               <div style={s.formGrid}>
                 <div><label style={s.label}>Current supplier</label>
-                  <select style={s.input()} value={form.supplier} onChange={e=>setForm(f=>({...f,supplier:e.target.value}))}>
+                  <select style={s.input(userPrefilled)} value={form.supplier} onChange={e=>setForm(f=>({...f,supplier:e.target.value}))}>
                     <option value="">Select…</option>{SUPPLIERS.map(sup=><option key={sup}>{sup}</option>)}
                   </select></div>
                 <div><label style={s.label}>Contracted power</label>
-                  <select style={s.input()} value={form.powerKva} onChange={e=>setForm(f=>({...f,powerKva:parseFloat(e.target.value)}))}>
+                  <select style={s.input(userPrefilled)} value={form.powerKva} onChange={e=>setForm(f=>({...f,powerKva:parseFloat(e.target.value)}))}>
                     {POWERS.map(p=><option key={p} value={p}>{p} kVA</option>)}
                   </select></div>
                 <div><label style={s.label}>Monthly consumption (kWh)</label>
-                  <input style={s.input(!!(extracted as any).kwhMonth)} type="number" value={form.kwhMonth} onChange={e=>setForm(f=>({...f,kwhMonth:e.target.value}))} placeholder="e.g. 320"/></div>
+                  <input style={s.input(userPrefilled||!!(extracted as any).kwhMonth)} type="number" value={form.kwhMonth} onChange={e=>setForm(f=>({...f,kwhMonth:e.target.value}))} placeholder="e.g. 320"/></div>
                 <div><label style={s.label}>Monthly bill total (€)</label>
-                  <input style={s.input(!!(extracted as any).billTotal)} type="number" value={form.bill} onChange={e=>setForm(f=>({...f,bill:e.target.value}))} placeholder="e.g. 78.50" step="0.01"/></div>
+                  <input style={s.input(userPrefilled||!!(extracted as any).billTotal)} type="number" value={form.bill} onChange={e=>setForm(f=>({...f,bill:e.target.value}))} placeholder="e.g. 78.50" step="0.01"/></div>
                 <div><label style={s.label}>Tariff cycle</label>
                   <select style={s.input()} value={form.tariff} onChange={e=>setForm(f=>({...f,tariff:e.target.value}))}>
                     <option value="simple">Simple (single rate)</option>
