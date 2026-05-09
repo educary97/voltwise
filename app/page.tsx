@@ -29,6 +29,7 @@ const s = {
   dropTitle: { fontSize:16, fontWeight:600, color:"#1a1a1a", marginBottom:6 } as React.CSSProperties,
   dropSub: { fontSize:13, color:"#aaa" } as React.CSSProperties,
   manualLink: { display:"block", textAlign:"center" as const, padding:12, fontSize:14, color:"#6abf69", fontWeight:500, cursor:"pointer" } as React.CSSProperties,
+  agentLink: { display:"block", textAlign:"center" as const, padding:"8px", fontSize:13, color:"#bbb", cursor:"pointer", transition:"color 0.2s" } as React.CSSProperties,
   extractBanner: { background:"#f0faf0", border:"1px solid #c8e6c8", borderRadius:14, padding:"14px 18px", display:"flex", gap:10, alignItems:"flex-start", marginBottom:20, fontSize:14, color:"#3a7a3a", lineHeight:1.5 } as React.CSSProperties,
   userBanner: { background:"#1a1a1a", borderRadius:16, padding:"16px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 } as React.CSSProperties,
   card: { background:"white", border:"1px solid #e8e6df", borderRadius:20, padding:24, marginBottom:14 } as React.CSSProperties,
@@ -96,40 +97,32 @@ function FilterBtn({label,active,onClick}:{label:string,active:boolean,onClick:(
 
 export default function Home() {
   const router = useRouter();
-  const [step,        setStep]        = useState<Step>("upload");
-  const [extracted,   setExtracted]   = useState<Record<string,unknown>>({});
-  const [extractMsg,  setExtractMsg]  = useState("");
-  const [form,        setForm]        = useState({supplier:"",powerKva:6.9,kwhMonth:"",bill:"",tariff:"simple",peak:"",offpeak:""});
-  const [results,     setResults]     = useState<any>(null);
-  const [loadMsg,     setLoadMsg]     = useState("");
-  const [expanded,    setExpanded]    = useState<Set<number>>(new Set());
-  const [filter,      setFilter]      = useState("all");
-  const [dragOver,    setDragOver]    = useState(false);
-  const [visible,     setVisible]     = useState(false);
-  const [userName,    setUserName]    = useState<string|null>(null);
+  const [step,          setStep]          = useState<Step>("upload");
+  const [extracted,     setExtracted]     = useState<Record<string,unknown>>({});
+  const [extractMsg,    setExtractMsg]    = useState("");
+  const [form,          setForm]          = useState({supplier:"",powerKva:6.9,kwhMonth:"",bill:"",tariff:"simple",peak:"",offpeak:""});
+  const [results,       setResults]       = useState<any>(null);
+  const [loadMsg,       setLoadMsg]       = useState("");
+  const [expanded,      setExpanded]      = useState<Set<number>>(new Set());
+  const [filter,        setFilter]        = useState("all");
+  const [dragOver,      setDragOver]      = useState(false);
+  const [visible,       setVisible]       = useState(false);
+  const [userName,      setUserName]      = useState<string|null>(null);
   const [userPrefilled, setUserPrefilled] = useState(false);
 
   useEffect(()=>{
     setTimeout(()=>setVisible(true),50);
-    // Check if returning agent user
     const email = localStorage.getItem("voltwise_user_email");
-    if (email) {
+    if(email){
       fetch(`/api/user?email=${encodeURIComponent(email)}`)
         .then(r=>r.json())
         .then(data=>{
-          if (data.found) {
-            setUserName(data.name?.split(" ")[0] ?? null);
-            setForm(f=>({
-              ...f,
-              supplier:  data.currentSupplier ?? f.supplier,
-              powerKva:  data.powerKva        ?? f.powerKva,
-              kwhMonth:  data.monthlyKwh      ? String(data.monthlyKwh)  : f.kwhMonth,
-              bill:      data.monthlyCost     ? String(data.monthlyCost) : f.bill,
-            }));
+          if(data.found){
+            setUserName(data.name?.split(" ")[0]??null);
+            setForm(f=>({...f,supplier:data.currentSupplier??f.supplier,powerKva:data.powerKva??f.powerKva,kwhMonth:data.monthlyKwh?String(data.monthlyKwh):f.kwhMonth,bill:data.monthlyCost?String(data.monthlyCost):f.bill}));
             setUserPrefilled(true);
           }
-        })
-        .catch(()=>{});
+        }).catch(()=>{});
     }
   },[]);
 
@@ -144,7 +137,7 @@ export default function Home() {
       const json=await res.json();clearInterval(iv);
       if(json.success){const d=json.data;setExtracted(d);setExtractMsg(d.summary);setForm(f=>({...f,supplier:d.supplier??f.supplier,powerKva:d.powerKva??f.powerKva,kwhMonth:d.kwhMonth?String(d.kwhMonth):f.kwhMonth,bill:d.billTotal?String(d.billTotal):f.bill,tariff:d.tariffType??f.tariff,peak:d.peakKwh?String(d.peakKwh):f.peak,offpeak:d.offpeakKwh?String(d.offpeakKwh):f.offpeak}));}
       else{setExtractMsg("Couldn't read the invoice — please fill in your details below.");}
-    } catch{clearInterval(iv);setExtractMsg("Upload failed — please enter details manually.");}
+    }catch{clearInterval(iv);setExtractMsg("Upload failed — please enter details manually.");}
     setStep("form");
   }
 
@@ -157,7 +150,7 @@ export default function Home() {
       const res=await fetch("/api/compare",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({supplier:form.supplier||undefined,powerKva:form.powerKva,kwhMonth:kwh,currentBill:bill,tariffType:form.tariff,peakKwh:form.peak?parseFloat(form.peak):undefined,offpeakKwh:form.offpeak?parseFloat(form.offpeak):undefined})});
       clearInterval(iv);const data=await res.json();
       setResults({...data,currentBill:bill,currentSupplier:form.supplier});setFilter("all");setStep("results");
-    } catch{clearInterval(iv);alert("Comparison failed. Please try again.");setStep("form");}
+    }catch{clearInterval(iv);alert("Comparison failed. Please try again.");setStep("form");}
   }
 
   const stepNum=step==="upload"?1:step==="form"?2:step==="loading"?2:3;
@@ -179,7 +172,7 @@ export default function Home() {
         <div style={s.header}>
           <div style={s.logo}>Voltwise<span style={s.logoSpan}>.</span></div>
           <div style={{display:"flex",gap:10,alignItems:"center"}}>
-            {userName && <span style={{fontSize:13,color:"#888"}}>👋 {userName}</span>}
+            {userName&&<span style={{fontSize:13,color:"#888"}}>👋 {userName}</span>}
             <div style={s.badge}>ERSE official data</div>
           </div>
         </div>
@@ -200,8 +193,7 @@ export default function Home() {
         {/* UPLOAD */}
         {step==="upload"&&(
           <div>
-            {/* Returning user banner */}
-            {userPrefilled && userName && (
+            {userPrefilled&&userName&&(
               <div style={s.userBanner}>
                 <div>
                   <div style={{fontSize:13,fontWeight:600,color:"white",marginBottom:3}}>Welcome back, {userName}!</div>
@@ -210,12 +202,10 @@ export default function Home() {
                 <button onClick={()=>setStep("form")} style={{padding:"8px 16px",background:"#6abf69",color:"white",border:"none",borderRadius:10,fontSize:13,fontWeight:600,fontFamily:"inherit",cursor:"pointer",whiteSpace:"nowrap"}}>Compare now →</button>
               </div>
             )}
-
             <div style={s.uploadHero}>
               <h1 style={s.title}>Find out how much you could <span style={s.titleGreen}>save</span> on electricity</h1>
               <p style={s.sub}>Upload your bill and we compare every offer in Portugal using official ERSE data — in seconds.</p>
             </div>
-
             <label style={s.dropZone(dragOver)}
               onDragOver={e=>{e.preventDefault();setDragOver(true);}}
               onDragLeave={()=>setDragOver(false)}
@@ -226,6 +216,7 @@ export default function Home() {
               <div style={s.dropSub}>PDF, PNG or JPG · up to 10 MB</div>
             </label>
             <a style={s.manualLink} onClick={()=>setStep("form")}>Enter details manually instead →</a>
+            <a style={s.agentLink} onClick={()=>router.push("/signup")}>Join the monthly switching agent →</a>
           </div>
         )}
 
@@ -290,7 +281,6 @@ export default function Home() {
               <h2 style={{fontFamily:"Georgia,serif",fontSize:28,fontWeight:700,letterSpacing:"-0.02em",marginBottom:4}}>Here&apos;s what we found</h2>
               <p style={{fontSize:13,color:"#aaa"}}>Based on ERSE data · {new Date().toLocaleDateString("en-GB",{month:"long",year:"numeric"})}</p>
             </div>
-
             <div style={s.savingsHero}>
               <div style={s.savingsLabel}>Potential annual saving</div>
               <div style={s.savingsAmount}>{EUR(results.summary.potentialSaving)}</div>
@@ -308,26 +298,22 @@ export default function Home() {
                 </div>
               </div>
             </div>
-
             <div style={s.currentPlan}>
               <div style={{fontSize:14,color:"#8a7a50"}}><strong>{results.currentSupplier||"Current supplier"}</strong> · {EUR2(results.currentBill)}/month · {EUR(results.currentBill*12)}/year</div>
               <div style={s.currentPlanBadge}>Current</div>
             </div>
-
             {results.recommendation&&(
               <div style={s.recommendation}>
                 <div style={s.recLabel}>Recommendation</div>
                 <p style={{fontSize:14,color:"#555",lineHeight:1.7}}>{results.recommendation}</p>
               </div>
             )}
-
             <div style={s.filters}>
               <span style={{fontSize:12,color:"#bbb",fontWeight:500}}>Show:</span>
               {[["all","All offers"],["green","🌱 Green"],["fixed","Fixed price"],["indexed","Indexed"]].map(([f,l])=>(
                 <FilterBtn key={f} label={l} active={filter===f} onClick={()=>setFilter(f)}/>
               ))}
             </div>
-
             <div>
               {filteredOffers.map((o:any,i:number)=>{
                 const isBest=i===0&&o.annualSaving>0;
@@ -374,7 +360,6 @@ export default function Home() {
                 );
               })}
             </div>
-
             <div style={s.footerNote}>
               Prices from the <a href="https://simuladorprecos.erse.pt/eletricidade/" target="_blank" rel="noopener" style={{color:"#6abf69"}}>ERSE official simulator</a>.<br/>
               Estimates based on supplier-declared data. Review contract terms before switching.
