@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { AgentConfig } from "../../agentConfig";
+import { AgentConfig } from "../agentConfig";
 import { SupplierOffer } from "./compareToCurrentPlan";
 
 export interface DraftedEmail {
