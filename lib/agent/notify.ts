@@ -12,27 +12,14 @@ export async function sendWhatsAppAlert(
   bestMonthlyEur: number
 ): Promise<void> {
   const message = [
-    `⚡ *Voltwise — Oportunidade de Poupança*`,
+    `⚡ *Voltwise — Poupança encontrada!*`,
     ``,
-    `Encontrei uma oferta melhor para a tua electricidade:`,
+    `De: ${currentSupplier} (€${currentMonthlyCost.toFixed(2)}/mês)`,
+    `Para: ${bestSupplier} - ${bestPlan} (€${bestMonthlyEur.toFixed(2)}/mês)`,
     ``,
-    `📋 *Plano atual*`,
-    `Fornecedor: ${currentSupplier}`,
-    `Custo mensal: €${currentMonthlyCost.toFixed(2)}`,
+    `💰 Poupa €${savingsPerMonth.toFixed(2)}/mês (€${savingsPerYear.toFixed(2)}/ano)`,
     ``,
-    `✨ *Melhor oferta*`,
-    `Fornecedor: ${bestSupplier}`,
-    `Plano: ${bestPlan}`,
-    `Custo estimado: €${bestMonthlyEur.toFixed(2)}/mês`,
-    ``,
-    `💰 *Poupança potencial*`,
-    `Por mês: €${savingsPerMonth.toFixed(2)}`,
-    `Por ano: €${savingsPerYear.toFixed(2)}`,
-    ``,
-    `🔍 Revê o rascunho do email e aprova a mudança:`,
-    approvalUrl,
-    ``,
-    `_(O link é válido durante 7 dias)_`,
+    `Aprova aqui: ${approvalUrl}`,
   ].join("\n");
 
   const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${config.twilioAccountSid}/Messages.json`;
