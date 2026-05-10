@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     const isCredits = /credit|insufficient|billing|402/i.test(msg);
 
     notifyAdmin({
-      type: isCredits ? "api_credits_exhausted" : is429 ? "api_rate_limit" : "api_error",
+      type: isCredits ? "api_credits_exhausted" : "api_error",
       error: msg,
       endpoint: "/api/extract"
     }).catch(() => {});
