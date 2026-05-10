@@ -98,7 +98,7 @@ export default function Home(){
 
   function animateSteps(setSt:(n:number)=>void,setDn:(d:boolean[])=>void,count:number,interval=900){
     let i=0;setSt(0);setDn(Array(count).fill(false));
-    const tick=()=>{setDn(d=>{const n=[...d];n[i]=true;return n;});i++;if(i<count)setTimeout(tick,interval);};
+    const tick=()=>{setDn((d:boolean[])=>{const n=[...d];n[i]=true;return n;});;i++;if(i<count)setTimeout(tick,interval);};
     setTimeout(tick,interval);
   }
 
