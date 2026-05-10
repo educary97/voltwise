@@ -1,571 +1,613 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
-type Step = "upload"|"form"|"loading"|"results";
-const POWERS = [1.15,2.3,3.45,4.6,5.75,6.9,10.35,13.8,17.25,20.7];
-const SUPPLIERS = ["EDP","Endesa","Galp","Goldenergy","Iberdrola","Repsol","Plenitude","MUON","Other"];
-const PC: Record<string,string> = {EDP:"#003c8f",Endesa:"#00a651",Galp:"#e30613",Goldenergy:"#f7a800",Iberdrola:"#3b8a29",Repsol:"#ff6600",Plenitude:"#5c2d91",MUON:"#0ea5e9"};
-const EUR  = (n:number) => new Intl.NumberFormat("en-GB",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);
-const EUR2 = (n:number) => new Intl.NumberFormat("en-GB",{style:"currency",currency:"EUR",minimumFractionDigits:2}).format(n);
-const EUR4 = (n:number) => n.toFixed(4);
-const loadingMessages = ["Checking every supplier in Portugal…","Crunching the 2026 ERSE tariffs…","Finding your best deal…","Almost there…"];
+type Step = "upload" | "form" | "loading" | "results";
 
-interface MonthData { month: string; kwh: string; bill: string; }
+const POWERS = [1.15, 2.3, 3.45, 4.6, 5.75, 6.9, 10.35, 13.8, 17.25, 20.7];
 
-const s = {
-  body:             { fontFamily:"'DM Sans','Helvetica Neue',Arial,sans-serif", background:"#FAFAF7", minHeight:"100vh", color:"#1a1a1a" } as React.CSSProperties,
-  wrap:             { maxWidth:640, margin:"0 auto", padding:"0 20px 80px" } as React.CSSProperties,
-  header:           { display:"flex", alignItems:"center", justifyContent:"space-between", padding:"28px 0 24px", borderBottom:"1px solid #e8e6df", marginBottom:"32px" } as React.CSSProperties,
-  logo:             { fontSize:22, fontWeight:700, letterSpacing:"-0.02em", color:"#1a1a1a" } as React.CSSProperties,
-  logoSpan:         { color:"#6abf69" } as React.CSSProperties,
-  badge:            { fontSize:11, fontWeight:500, color:"#6abf69", background:"#f0faf0", border:"1px solid #c8e6c8", padding:"4px 12px", borderRadius:20 } as React.CSSProperties,
-  steps:            { display:"flex", alignItems:"center", marginBottom:36 } as React.CSSProperties,
-  stepLine:         { flex:1, height:1, background:"#e8e6df", margin:"0 8px" } as React.CSSProperties,
-  stepItem:         { display:"flex", alignItems:"center", gap:8 } as React.CSSProperties,
-  uploadHero:       { textAlign:"center" as const, padding:"12px 0 28px" } as React.CSSProperties,
-  title:            { fontFamily:"Georgia,'Times New Roman',serif", fontSize:34, fontWeight:700, lineHeight:1.2, letterSpacing:"-0.02em", color:"#1a1a1a", marginBottom:12 } as React.CSSProperties,
-  titleGreen:       { color:"#6abf69", fontStyle:"italic" } as React.CSSProperties,
-  sub:              { fontSize:15, color:"#888", lineHeight:1.6, maxWidth:380, margin:"0 auto 28px" } as React.CSSProperties,
-  dropZone:         (hover:boolean,hasFiles:boolean): React.CSSProperties => ({ border:`2px dashed ${hover?"#6abf69":hasFiles?"#6abf69":"#d5d2c8"}`, borderRadius:20, padding:"40px 32px", textAlign:"center", cursor:"pointer", background:hover?"#f7fdf7":hasFiles?"#f7fdf7":"white", transition:"all 0.2s ease", marginBottom:12, display:"block" }),
-  dropIcon:         { width:52, height:52, borderRadius:14, background:"#f0faf0", border:"1px solid #c8e6c8", display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, margin:"0 auto 14px" } as React.CSSProperties,
-  dropTitle:        { fontSize:16, fontWeight:600, color:"#1a1a1a", marginBottom:6 } as React.CSSProperties,
-  dropSub:          { fontSize:13, color:"#aaa" } as React.CSSProperties,
-  fileList:         { display:"flex", flexDirection:"column" as const, gap:6, marginTop:14 } as React.CSSProperties,
-  fileItem:         { display:"flex", alignItems:"center", justifyContent:"space-between", background:"white", border:"1px solid #c8e6c8", borderRadius:10, padding:"8px 14px", fontSize:13 } as React.CSSProperties,
-  manualLink:       { display:"block", textAlign:"center" as const, padding:12, fontSize:14, color:"#6abf69", fontWeight:500, cursor:"pointer" } as React.CSSProperties,
-  agentLink:        { display:"block", textAlign:"center" as const, padding:"6px", fontSize:13, color:"#bbb", cursor:"pointer" } as React.CSSProperties,
-  extractBanner:    { background:"#f0faf0", border:"1px solid #c8e6c8", borderRadius:14, padding:"14px 18px", display:"flex", gap:10, alignItems:"flex-start", marginBottom:20, fontSize:14, color:"#3a7a3a", lineHeight:1.5 } as React.CSSProperties,
-  userBanner:       { background:"#1a1a1a", borderRadius:16, padding:"16px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 } as React.CSSProperties,
-  card:             { background:"white", border:"1px solid #e8e6df", borderRadius:20, padding:24, marginBottom:14 } as React.CSSProperties,
-  cardTitle:        { fontSize:11, fontWeight:600, color:"#bbb", textTransform:"uppercase" as const, letterSpacing:"0.08em", marginBottom:20 } as React.CSSProperties,
-  formGrid:         { display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 } as React.CSSProperties,
-  label:            { display:"block", fontSize:12, fontWeight:500, color:"#888", marginBottom:6 } as React.CSSProperties,
-  input:            (prefilled?:boolean): React.CSSProperties => ({ width:"100%", border:`1.5px solid ${prefilled?"#c8e6c8":"#e8e6df"}`, borderRadius:10, padding:"10px 14px", fontSize:14, fontFamily:"inherit", color:"#1a1a1a", background:prefilled?"#f7fdf7":"white", outline:"none", boxSizing:"border-box" }),
-  btnPrimary:       { width:"100%", padding:"16px 24px", background:"#1a1a1a", color:"white", border:"none", borderRadius:14, fontSize:15, fontWeight:600, fontFamily:"inherit", cursor:"pointer" } as React.CSSProperties,
-  btnGhost:         { width:"100%", padding:"13px 24px", background:"white", color:"#888", border:"1.5px solid #e8e6df", borderRadius:14, fontSize:14, fontWeight:500, fontFamily:"inherit", cursor:"pointer", marginTop:10 } as React.CSSProperties,
-  btnSmall:         { padding:"6px 14px", background:"white", color:"#888", border:"1.5px solid #e8e6df", borderRadius:8, fontSize:12, fontWeight:500, fontFamily:"inherit", cursor:"pointer" } as React.CSSProperties,
-  expandToggle:     { display:"flex", alignItems:"center", gap:6, fontSize:13, color:"#6abf69", fontWeight:500, cursor:"pointer", padding:"10px 0 4px", background:"none", border:"none", fontFamily:"inherit" } as React.CSSProperties,
-  loadingWrap:      { textAlign:"center" as const, padding:"80px 0" } as React.CSSProperties,
-  loadingTitle:     { fontFamily:"Georgia,serif", fontSize:22, fontWeight:600, marginBottom:8 } as React.CSSProperties,
-  loadingSub:       { fontSize:14, color:"#aaa" } as React.CSSProperties,
-  savingsHero:      { background:"#1a1a1a", borderRadius:24, padding:32, marginBottom:16 } as React.CSSProperties,
-  savingsLabel:     { fontSize:12, fontWeight:500, color:"#666", letterSpacing:"0.05em", textTransform:"uppercase" as const, marginBottom:8 } as React.CSSProperties,
-  savingsAmount:    { fontFamily:"Georgia,serif", fontSize:52, fontWeight:700, color:"#6abf69", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 } as React.CSSProperties,
-  savingsPer:       { fontSize:14, color:"#555", marginBottom:20 } as React.CSSProperties,
-  savingsGrid:      { display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 } as React.CSSProperties,
-  savingsStat:      { background:"rgba(255,255,255,0.05)", borderRadius:12, padding:"14px 16px" } as React.CSSProperties,
-  savingsStatLabel: { fontSize:11, color:"#555", marginBottom:4 } as React.CSSProperties,
-  savingsStatValue: { fontSize:18, fontWeight:600, color:"white" } as React.CSSProperties,
-  savingsStatSub:   { fontSize:11, color:"#444", marginTop:2 } as React.CSSProperties,
-  currentPlan:      { background:"#fffbf0", border:"1px solid #f0e6c0", borderRadius:14, padding:"16px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 } as React.CSSProperties,
-  currentPlanBadge: { fontSize:10, fontWeight:700, color:"#8a6a20", background:"#f5d97a", padding:"3px 10px", borderRadius:20, textTransform:"uppercase" as const, letterSpacing:"0.05em", whiteSpace:"nowrap" as const } as React.CSSProperties,
-  recommendation:   { background:"white", border:"1px solid #e8e6df", borderRadius:14, padding:"18px 20px", marginBottom:20 } as React.CSSProperties,
-  recLabel:         { fontSize:11, fontWeight:600, color:"#bbb", textTransform:"uppercase" as const, letterSpacing:"0.08em", marginBottom:10 } as React.CSSProperties,
-  sliderCard:       { background:"white", border:"1px solid #e8e6df", borderRadius:16, padding:"18px 20px", marginBottom:20 } as React.CSSProperties,
-  filters:          { display:"flex", gap:8, alignItems:"center", marginBottom:16, flexWrap:"wrap" as const } as React.CSSProperties,
-  offerCard:        (type:"best"|"current"|"normal"): React.CSSProperties => ({
-    background: type==="best"?"linear-gradient(135deg,#f7fdf7 0%,white 100%)":type==="current"?"#fffdf5":"white",
-    border:`${type==="normal"?"1.5px":"2px"} solid ${type==="best"?"#6abf69":type==="current"?"#f5d97a":"#e8e6df"}`,
-    borderRadius:18, padding:"18px 20px", cursor:"pointer", marginBottom:10,
-    boxShadow:type==="best"?"0 2px 20px rgba(106,191,105,0.12)":"none",
-  }),
-  offerTop:         { display:"flex", justifyContent:"space-between", alignItems:"flex-start" } as React.CSSProperties,
-  offerLeft:        { display:"flex", gap:12, alignItems:"flex-start", flex:1 } as React.CSSProperties,
-  offerLogo:        (bg:string): React.CSSProperties => ({ width:36, height:36, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:800, color:"white", flexShrink:0, background:bg }),
-  offerName:        { fontSize:14, fontWeight:600, color:"#1a1a1a", marginBottom:2, lineHeight:1.3 } as React.CSSProperties,
-  offerProvider:    { fontSize:12, color:"#aaa" } as React.CSSProperties,
-  offerRight:       { textAlign:"right" as const, flexShrink:0 } as React.CSSProperties,
-  offerPrice:       { fontFamily:"Georgia,serif", fontSize:22, fontWeight:600, color:"#1a1a1a" } as React.CSSProperties,
-  offerYear:        { fontSize:12, color:"#aaa", marginTop:2 } as React.CSSProperties,
-  offerTags:        { display:"flex", gap:6, flexWrap:"wrap" as const, marginTop:10 } as React.CSSProperties,
-  tag:              (type:string): React.CSSProperties => ({
-    fontSize:11, padding:"3px 10px", borderRadius:20, fontWeight:500,
-    background:type==="best"?"#6abf69":type==="current"?"#f5d97a":type==="green"?"#f0faf0":type==="indexed"?"#fff8ee":"#eef4ff",
-    color:type==="best"?"white":type==="current"?"#8a6a20":type==="green"?"#4a9f4a":type==="indexed"?"#bf8a4a":"#4a6abf",
-  }),
-  detailsSection:   { marginTop:16, paddingTop:16, borderTop:"1px solid #f0ede6" } as React.CSSProperties,
-  detailsGrid:      { display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:14 } as React.CSSProperties,
-  detailCell:       { background:"#fafaf7", borderRadius:10, padding:"10px 12px" } as React.CSSProperties,
-  detailLabel:      { fontSize:10, color:"#bbb", marginBottom:3 } as React.CSSProperties,
-  detailValue:      { fontSize:13, fontWeight:600, color:"#1a1a1a" } as React.CSSProperties,
-  breakdownBar:     { marginTop:12, marginBottom:14 } as React.CSSProperties,
-  switchBtn:        { display:"inline-flex", alignItems:"center", gap:6, padding:"10px 18px", background:"#1a1a1a", color:"white", border:"none", borderRadius:10, fontSize:13, fontWeight:600, fontFamily:"inherit", cursor:"pointer" } as React.CSSProperties,
-  footerNote:       { fontSize:12, color:"#bbb", textAlign:"center" as const, paddingTop:24, borderTop:"1px solid #f0ede6", marginTop:24, lineHeight:1.7 } as React.CSSProperties,
-  monthRow:         { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:10, alignItems:"end" } as React.CSSProperties,
-};
+const SUPPLIERS = [
+  { id: "EDP",        label: "EDP",        color: "#003c8f" },
+  { id: "Endesa",     label: "Endesa",     color: "#00a651" },
+  { id: "Galp",       label: "Galp",       color: "#e30613" },
+  { id: "Goldenergy", label: "Goldenergy", color: "#f7a800" },
+  { id: "Iberdrola",  label: "Iberdrola",  color: "#3b8a29" },
+  { id: "Repsol",     label: "Repsol",     color: "#ff6600" },
+  { id: "Plenitude",  label: "Plenitude",  color: "#5c2d91" },
+  { id: "MUON",       label: "MUON",       color: "#0ea5e9" },
+  { id: "Other",      label: "Other",      color: "#888" },
+];
 
-function StepDot({n,state}:{n:string,state:"done"|"active"|"inactive"}) {
-  const bg=state==="done"?"#6abf69":state==="active"?"#1a1a1a":"#eeede8";
-  return <div style={{width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600,background:bg,color:state==="inactive"?"#aaa":"white",flexShrink:0}}>{state==="done"?"✓":n}</div>;
-}
+const PC: Record<string, string> = Object.fromEntries(SUPPLIERS.map(s => [s.id, s.color]));
 
-function FilterBtn({label,active,onClick}:{label:string,active:boolean,onClick:()=>void}) {
-  return <button onClick={onClick} style={{padding:"6px 14px",borderRadius:20,fontSize:13,fontWeight:500,border:`1.5px solid ${active?"#1a1a1a":"#e8e6df"}`,background:active?"#1a1a1a":"white",color:active?"white":"#888",cursor:"pointer",fontFamily:"inherit"}}>{label}</button>;
-}
+const EUR  = (n: number) => new Intl.NumberFormat("en-GB", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
+const EUR2 = (n: number) => new Intl.NumberFormat("en-GB", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(n);
 
-function BreakdownBar({fixed,variable,taxes}:{fixed:number,variable:number,taxes:number}) {
-  const total = fixed + variable + taxes;
-  const fp = (fixed/total*100).toFixed(0);
-  const vp = (variable/total*100).toFixed(0);
-  const tp = (taxes/total*100).toFixed(0);
-  return (
-    <div style={s.breakdownBar}>
-      <div style={{display:"flex",height:6,borderRadius:6,overflow:"hidden",gap:2,marginBottom:6}}>
-        <div style={{width:`${fp}%`,background:"#6abf69",borderRadius:"6px 0 0 6px"}}/>
-        <div style={{width:`${vp}%`,background:"#4a9f4a"}}/>
-        <div style={{width:`${tp}%`,background:"#aaa",borderRadius:"0 6px 6px 0"}}/>
-      </div>
-      <div style={{display:"flex",gap:12,fontSize:10,color:"#888"}}>
-        <span>🟢 Fixed {fp}% ({EUR2(fixed)})</span>
-        <span>🌿 Energy {vp}% ({EUR2(variable)})</span>
-        <span>⬜ Taxes {tp}% ({EUR2(taxes)})</span>
-      </div>
-    </div>
-  );
-}
+const LOADING_STEPS = [
+  "Interrogating 15 suppliers…",
+  "Crunching 2026 ERSE tariffs…",
+  "Ranking all your options…",
+  "Writing your recommendation…",
+];
+
+interface MonthData { label: string; kwh: string; bill: string; }
 
 export default function Home() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sliderTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [step,          setStep]          = useState<Step>("upload");
-  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
-  const [extracted,     setExtracted]     = useState<Record<string,unknown>>({});
-  const [extractMsg,    setExtractMsg]    = useState("");
-  const [months,        setMonths]        = useState<MonthData[]>([
-    {month:"Month 1",kwh:"",bill:""},
-    {month:"Month 2",kwh:"",bill:""},
-    {month:"Month 3",kwh:"",bill:""},
+  const [step,           setStep]           = useState<Step>("upload");
+  const [uploadedFiles,  setUploadedFiles]  = useState<File[]>([]);
+  const [extracted,      setExtracted]      = useState<Record<string, unknown>>({});
+  const [extractMsg,     setExtractMsg]     = useState("");
+  const [months,         setMonths]         = useState<MonthData[]>([
+    { label: "This month", kwh: "", bill: "" },
+    { label: "Last month", kwh: "", bill: "" },
+    { label: "2 months ago", kwh: "", bill: "" },
   ]);
-  const [form,          setForm]          = useState({
-    supplier:"", powerKva:6.9, tariff:"simple",
-  });
+  const [form,           setForm]           = useState({ supplier: "", powerKva: 6.9, tariff: "simple" });
   const [showComponents, setShowComponents] = useState(false);
-  const [components,    setComponents]    = useState({ pricePerKwh:"", fixedMonthly:"" });
-  const [consumFactor,  setConsumFactor]  = useState(1.0);
-  const [results,       setResults]       = useState<any>(null);
-  const [loadMsg,       setLoadMsg]       = useState("");
-  const [expanded,      setExpanded]      = useState<Set<number>>(new Set());
-  const [filter,        setFilter]        = useState("all");
-  const [dragOver,      setDragOver]      = useState(false);
-  const [visible,       setVisible]       = useState(false);
-  const [userName,      setUserName]      = useState<string|null>(null);
-  const [userPrefilled, setUserPrefilled] = useState(false);
+  const [components,     setComponents]     = useState({ pricePerKwh: "", fixedMonthly: "" });
+  const [consumFactor,   setConsumFactor]   = useState(1.0);
+  const [results,        setResults]        = useState<any>(null);
+  const [loadStep,       setLoadStep]       = useState(0);
+  const [loadDone,       setLoadDone]       = useState<boolean[]>([false, false, false, false]);
+  const [expanded,       setExpanded]       = useState<Set<number>>(new Set());
+  const [filter,         setFilter]         = useState("all");
+  const [dragOver,       setDragOver]       = useState(false);
+  const [visible,        setVisible]        = useState(false);
+  const [userName,       setUserName]       = useState<string | null>(null);
+  const [userPrefilled,  setUserPrefilled]  = useState(false);
 
-  useEffect(()=>{
-    setTimeout(()=>setVisible(true),50);
+  useEffect(() => {
+    setTimeout(() => setVisible(true), 50);
     const email = localStorage.getItem("voltwise_user_email");
-    if(email){
+    if (email) {
       fetch(`/api/user?email=${encodeURIComponent(email)}`)
-        .then(r=>r.json())
-        .then(data=>{
-          if(data.found){
-            setUserName(data.name?.split(" ")[0]??null);
-            setForm(f=>({...f,supplier:data.currentSupplier??f.supplier,powerKva:data.powerKva??f.powerKva}));
-            setMonths(m=>{
-              const updated=[...m];
-              if(data.monthlyKwh) updated[0]={...updated[0],kwh:String(data.monthlyKwh)};
-              if(data.monthlyCost) updated[0]={...updated[0],bill:String(data.monthlyCost)};
-              return updated;
+        .then(r => r.json())
+        .then(data => {
+          if (data.found) {
+            setUserName(data.name?.split(" ")[0] ?? null);
+            setForm(f => ({ ...f, supplier: data.currentSupplier ?? f.supplier, powerKva: data.powerKva ?? f.powerKva }));
+            setMonths(m => {
+              const u = [...m];
+              if (data.monthlyKwh)  u[0] = { ...u[0], kwh: String(data.monthlyKwh) };
+              if (data.monthlyCost) u[0] = { ...u[0], bill: String(data.monthlyCost) };
+              return u;
             });
             setUserPrefilled(true);
           }
-        }).catch(()=>{});
+        }).catch(() => {});
     }
-  },[]);
+  }, []);
 
-  const toggle=(id:number)=>setExpanded(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
+  const toggle = (id: number) => setExpanded(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
-  // Average non-empty months
   function getAverages() {
-    const filled = months.filter(m=>m.kwh&&m.bill);
-    if(!filled.length) return {kwhMonth:0, currentBill:0};
-    const kwhMonth   = filled.reduce((s,m)=>s+parseFloat(m.kwh),0)/filled.length;
-    const currentBill= filled.reduce((s,m)=>s+parseFloat(m.bill),0)/filled.length;
-    return {kwhMonth, currentBill};
+    const filled = months.filter(m => m.kwh && m.bill);
+    if (!filled.length) return { kwhMonth: 0, currentBill: 0 };
+    return {
+      kwhMonth:    filled.reduce((s, m) => s + parseFloat(m.kwh),  0) / filled.length,
+      currentBill: filled.reduce((s, m) => s + parseFloat(m.bill), 0) / filled.length,
+    };
+  }
+
+  function startLoadingAnimation() {
+    setLoadStep(0);
+    setLoadDone([false, false, false, false]);
+    let i = 0;
+    const tick = () => {
+      setLoadDone(d => { const n = [...d]; n[i] = true; return n; });
+      i++;
+      if (i < LOADING_STEPS.length) setTimeout(tick, 900);
+    };
+    setTimeout(tick, 800);
   }
 
   async function processFiles(files: File[]) {
-    const limited = files.slice(0,3);
+    const limited = files.slice(0, 3);
     setUploadedFiles(limited);
-    setStep("loading"); setLoadMsg("Reading your invoices with Claude AI…");
-
-    const results: any[] = [];
-    for(let i=0;i<limited.length;i++){
-      setLoadMsg(`Reading invoice ${i+1} of ${limited.length}…`);
-      const fd=new FormData(); fd.append("file",limited[i]);
-      try{
-        const res=await fetch("/api/extract",{method:"POST",body:fd});
-        const json=await res.json();
-        if(json.success) results.push(json.data);
-      }catch{}
+    setStep("loading");
+    startLoadingAnimation();
+    const extracted: any[] = [];
+    for (let i = 0; i < limited.length; i++) {
+      const fd = new FormData(); fd.append("file", limited[i]);
+      try {
+        const res  = await fetch("/api/extract", { method: "POST", body: fd });
+        const json = await res.json();
+        if (json.success) extracted.push(json.data);
+      } catch {}
     }
-
-    if(results.length>0){
-      // Average the extracted values
-      const avgKwh  = results.reduce((s,d)=>s+(d.kwhMonth??0),0)/results.filter(d=>d.kwhMonth).length||0;
-      const avgBill = results.reduce((s,d)=>s+(d.billTotal??0),0)/results.filter(d=>d.billTotal).length||0;
-      const supplier= results[0].supplier ?? "";
-      const powerKva= results[0].powerKva ?? 6.9;
-      const tariff  = results[0].tariffType ?? "simple";
-      const pricePerKwh = results[0].pricePerKwh ?? "";
-      const fixedMonthly= results[0].fixedMonthly ?? "";
-
-      setExtracted(results[0]);
-      setExtractMsg(`Read ${results.length} invoice${results.length>1?"s":""} — averaged your consumption and spend.`);
-      setForm(f=>({...f, supplier:supplier||f.supplier, powerKva:powerKva||f.powerKva, tariff:tariff||f.tariff}));
-
-      // Populate months with extracted data
-      setMonths(m=>{
-        const updated=[...m];
-        results.forEach((d,i)=>{
-          if(i<3){
-            updated[i]={
-              month:`Month ${i+1}`,
-              kwh:  d.kwhMonth  ? String(Math.round(d.kwhMonth))  : updated[i].kwh,
-              bill: d.billTotal ? String(d.billTotal.toFixed(2))   : updated[i].bill,
-            };
-          }
+    if (extracted.length > 0) {
+      const valid = (key: string) => extracted.filter(d => d[key]);
+      const avg   = (key: string) => valid(key).reduce((s: number, d: any) => s + d[key], 0) / (valid(key).length || 1);
+      setExtracted(extracted[0]);
+      setExtractMsg(`Read ${extracted.length} invoice${extracted.length > 1 ? "s" : ""} — averaged your consumption and spend.`);
+      setForm(f => ({
+        ...f,
+        supplier:  extracted[0].supplier  ?? f.supplier,
+        powerKva:  extracted[0].powerKva  ?? f.powerKva,
+        tariff:    extracted[0].tariffType ?? f.tariff,
+      }));
+      setMonths(m => {
+        const u = [...m];
+        extracted.forEach((d, i) => {
+          if (i < 3) u[i] = {
+            label: u[i].label,
+            kwh:   d.kwhMonth  ? String(Math.round(d.kwhMonth))        : u[i].kwh,
+            bill:  d.billTotal ? String(d.billTotal.toFixed(2))         : u[i].bill,
+          };
         });
-        return updated;
+        return u;
       });
-
-      if(pricePerKwh) setComponents(c=>({...c,pricePerKwh:String(pricePerKwh)}));
-      if(fixedMonthly) setComponents(c=>({...c,fixedMonthly:String(fixedMonthly)}));
+      if (extracted[0].pricePerKwh)  setComponents(c => ({ ...c, pricePerKwh:  String(extracted[0].pricePerKwh) }));
+      if (extracted[0].fixedMonthly) setComponents(c => ({ ...c, fixedMonthly: String(extracted[0].fixedMonthly) }));
     } else {
-      setExtractMsg("Couldn't read the invoices — please fill in the details below.");
+      setExtractMsg("Couldn't read invoices — please fill in details below.");
     }
     setStep("form");
   }
 
+  const runCompare = useCallback(async (factor: number) => {
+    const { kwhMonth, currentBill } = getAverages();
+    if (!kwhMonth || !currentBill) return;
+    try {
+      const res  = await fetch("/api/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          supplier:            form.supplier || undefined,
+          powerKva:            form.powerKva,
+          kwhMonth,
+          currentBill,
+          tariffType:          form.tariff,
+          currentPricePerKwh:  components.pricePerKwh  ? parseFloat(components.pricePerKwh)  : undefined,
+          currentFixedMonthly: components.fixedMonthly ? parseFloat(components.fixedMonthly) : undefined,
+          consumptionFactor:   factor,
+        }),
+      });
+      const data = await res.json();
+      setResults({ ...data, currentBill, currentSupplier: form.supplier });
+      setFilter("all");
+    } catch {}
+  }, [form, components, months]);
+
   async function handleCompare() {
-    const {kwhMonth, currentBill} = getAverages();
-    if(!kwhMonth||!currentBill){alert("Please enter at least one month's consumption and bill.");return;}
-    setStep("loading"); let mi=0; setLoadMsg(loadingMessages[0]);
-    const iv=setInterval(()=>setLoadMsg(loadingMessages[Math.min(++mi,3)]),900);
-    try{
-      const res=await fetch("/api/compare",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-        supplier:           form.supplier||undefined,
-        powerKva:           form.powerKva,
-        kwhMonth,
-        currentBill,
-        tariffType:         form.tariff,
-        currentPricePerKwh: components.pricePerKwh ? parseFloat(components.pricePerKwh) : undefined,
-        currentFixedMonthly:components.fixedMonthly? parseFloat(components.fixedMonthly): undefined,
-        consumptionFactor:  consumFactor,
-      })});
-      clearInterval(iv);
-      const data=await res.json();
-      setResults({...data,currentBill,currentSupplier:form.supplier});
-      setFilter("all"); setStep("results");
-    }catch{clearInterval(iv);alert("Comparison failed. Please try again.");setStep("form");}
+    const { kwhMonth, currentBill } = getAverages();
+    if (!kwhMonth || !currentBill) { alert("Please enter at least one month's consumption and bill."); return; }
+    setStep("loading");
+    startLoadingAnimation();
+    await runCompare(consumFactor);
+    setStep("results");
   }
 
-  const stepNum = step==="upload"?1:step==="form"?2:step==="loading"?2:3;
-  const filteredOffers = results?.offers?.filter((o:any)=>filter==="all"||(filter==="green"&&o.green)||(filter==="fixed"&&o.type==="fixed")||(filter==="indexed"&&o.type==="indexed"))??[];
-  const adjustedKwh = results ? results.adjustedKwh : 0;
+  function handleSlider(val: number) {
+    setConsumFactor(val);
+    if (sliderTimer.current) clearTimeout(sliderTimer.current);
+    sliderTimer.current = setTimeout(() => runCompare(val), 600);
+  }
+
+  const stepNum = step === "upload" ? 1 : step === "form" ? 2 : step === "loading" ? 2 : 3;
+  const { kwhMonth: avgKwh } = getAverages();
+  const filledMonths = months.filter(m => m.kwh && m.bill).length;
+
+  const allOffers      = results?.offers ?? [];
+  const filteredOffers = allOffers.filter((o: any) =>
+    filter === "all" || (filter === "green" && o.green) ||
+    (filter === "fixed" && o.type === "fixed") || (filter === "indexed" && o.type === "indexed")
+  );
+  const counts = {
+    all:     allOffers.length,
+    green:   allOffers.filter((o: any) => o.green).length,
+    fixed:   allOffers.filter((o: any) => o.type === "fixed").length,
+    indexed: allOffers.filter((o: any) => o.type === "indexed").length,
+  };
 
   return (
-    <div style={{...s.body,opacity:visible?1:0,transform:visible?"translateY(0)":"translateY(10px)",transition:"opacity 0.5s ease, transform 0.5s ease"}}>
+    <div style={{ fontFamily: "'DM Sans','Helvetica Neue',Arial,sans-serif", background: "#FAFAF7", minHeight: "100vh", color: "#1a1a1a", opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(10px)", transition: "opacity 0.5s ease, transform 0.5s ease" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
         *{box-sizing:border-box;}
         input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;}
-        input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:4px;background:#e8e6df;outline:none;}
-        input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#6abf69;cursor:pointer;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.15);}
-        select{-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23aaa' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px !important;}
+        input[type=range]{-webkit-appearance:none;width:100%;height:4px;border-radius:4px;background:#e8e6df;outline:none;}
+        input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:#6abf69;cursor:pointer;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.2);}
+        select{-webkit-appearance:none;}
         @keyframes spin{to{transform:rotate(360deg);}}
-        .vw-spinner{width:44px;height:44px;border:2.5px solid #e8e6df;border-top-color:#6abf69;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 24px;}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+        @keyframes checkPop{0%{transform:scale(0);}60%{transform:scale(1.2);}100%{transform:scale(1);}}
+        .vw-fade{animation:fadeIn 0.3s ease forwards;}
+        .vw-check{animation:checkPop 0.3s ease forwards;}
+        .vw-pill-kva{padding:8px 12px;border:1.5px solid #e8e6df;border-radius:10px;font-size:13px;font-weight:500;background:white;cursor:pointer;transition:all 0.15s;color:#888;font-family:inherit;white-space:nowrap;}
+        .vw-pill-kva:hover{border-color:#6abf69;color:#3a7a3a;}
+        .vw-pill-kva.active{background:#1a1a1a;border-color:#1a1a1a;color:white;}
+        .vw-supplier-card{border:1.5px solid #e8e6df;border-radius:12px;padding:12px 10px;background:white;cursor:pointer;transition:all 0.15s;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;font-weight:500;color:#888;font-family:inherit;}
+        .vw-supplier-card:hover{border-color:#6abf69;transform:translateY(-1px);}
+        .vw-supplier-card.active{border-width:2px;color:#1a1a1a;}
+        .vw-offer-card{background:white;border:1.5px solid #e8e6df;border-radius:18px;padding:18px 20px;margin-bottom:10px;transition:all 0.2s;}
+        .vw-offer-card:hover{border-color:#ccc;box-shadow:0 2px 12px rgba(0,0,0,0.06);}
+        .vw-offer-card.best{border:2px solid #6abf69;background:linear-gradient(135deg,#f7fdf7 0%,white 100%);box-shadow:0 2px 20px rgba(106,191,105,0.12);}
+        .vw-offer-card.current{border:2px solid #f5d97a;background:#fffdf5;}
+        .vw-switch-btn{padding:9px 16px;background:#6abf69;color:white;border:none;border-radius:9px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.2s;white-space:nowrap;}
+        .vw-switch-btn:hover{background:#4a9f4a;transform:translateY(-1px);}
+        .vw-expand-btn{padding:9px 14px;background:white;color:#888;border:1.5px solid #e8e6df;border-radius:9px;font-size:12px;font-weight:500;font-family:inherit;cursor:pointer;}
+        .vw-expand-btn:hover{border-color:#bbb;color:#555;}
+        .trust-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:white;border:1px solid #e8e6df;border-radius:20px;font-size:12px;color:#888;font-weight:500;}
       `}</style>
 
-      <div style={s.wrap}>
+      <div style={{ maxWidth: 640, margin: "0 auto", padding: "0 20px 80px" }}>
+
         {/* Header */}
-        <div style={s.header}>
-          <div style={s.logo}>Voltwise<span style={s.logoSpan}>.</span></div>
-          <div style={{display:"flex",gap:10,alignItems:"center"}}>
-            {userName&&<span style={{fontSize:13,color:"#888"}}>👋 {userName}</span>}
-            <div style={s.badge}>ERSE official data</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "24px 0 20px", borderBottom: "1px solid #e8e6df", marginBottom: "28px" }}>
+          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>Voltwise<span style={{ color: "#6abf69" }}>.</span></div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {userName && <span style={{ fontSize: 13, color: "#888" }}>👋 {userName}</span>}
+            <div style={{ fontSize: 11, fontWeight: 500, color: "#6abf69", background: "#f0faf0", border: "1px solid #c8e6c8", padding: "4px 12px", borderRadius: 20 }}>ERSE 2026</div>
           </div>
         </div>
 
-        {/* Steps */}
-        <div style={s.steps}>
-          {[["1","Invoice"],["2","Review"],["3","Results"]].map(([n,l],i)=>(
-            <div key={n} style={{display:"flex",alignItems:"center",flex:i<2?1:0}}>
-              <div style={s.stepItem}>
-                <StepDot n={n} state={stepNum>i+1?"done":stepNum===i+1?"active":"inactive"}/>
-                <span style={{fontSize:13,fontWeight:500,color:stepNum===i+1?"#1a1a1a":"#bbb"}}>{l}</span>
+        {/* Steps — compact pill row */}
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 28, gap: 0 }}>
+          {[["1", "Invoice"], ["2", "Review"], ["3", "Results"]].map(([n, l], i) => {
+            const done   = stepNum > i + 1;
+            const active = stepNum === i + 1;
+            return (
+              <div key={n} style={{ display: "flex", alignItems: "center", flex: i < 2 ? 1 : 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, background: done ? "#6abf69" : active ? "#1a1a1a" : "#eeede8", color: done || active ? "white" : "#bbb", flexShrink: 0, transition: "all 0.3s" }}>{done ? "✓" : n}</div>
+                  <span style={{ fontSize: 12, fontWeight: 500, color: active ? "#1a1a1a" : "#bbb" }}>{l}</span>
+                </div>
+                {i < 2 && <div style={{ flex: 1, height: 1, background: stepNum > i + 1 ? "#6abf69" : "#e8e6df", margin: "0 10px", transition: "background 0.3s" }} />}
               </div>
-              {i<2&&<div style={s.stepLine}/>}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        {/* UPLOAD */}
-        {step==="upload"&&(
-          <div>
-            {userPrefilled&&userName&&(
-              <div style={s.userBanner}>
+        {/* ── UPLOAD ── */}
+        {step === "upload" && (
+          <div className="vw-fade">
+            {userPrefilled && userName && (
+              <div style={{ background: "#1a1a1a", borderRadius: 16, padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
                 <div>
-                  <div style={{fontSize:13,fontWeight:600,color:"white",marginBottom:3}}>Welcome back, {userName}!</div>
-                  <div style={{fontSize:12,color:"#666"}}>Your details are pre-filled. Upload a bill or compare directly.</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "white", marginBottom: 3 }}>Welcome back, {userName}!</div>
+                  <div style={{ fontSize: 12, color: "#666" }}>Your details are pre-filled.</div>
                 </div>
-                <button onClick={()=>setStep("form")} style={{padding:"8px 16px",background:"#6abf69",color:"white",border:"none",borderRadius:10,fontSize:13,fontWeight:600,fontFamily:"inherit",cursor:"pointer",whiteSpace:"nowrap"}}>Compare now →</button>
+                <button onClick={() => setStep("form")} style={{ padding: "8px 16px", background: "#6abf69", color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }}>Compare now →</button>
               </div>
             )}
-            <div style={s.uploadHero}>
-              <h1 style={s.title}>Find out how much you could <span style={s.titleGreen}>save</span> on electricity</h1>
-              <p style={s.sub}>Upload up to 3 months of bills for a more accurate comparison. We use the 2026 ERSE official tariffs.</p>
+
+            <div style={{ textAlign: "center", padding: "8px 0 28px" }}>
+              <h1 style={{ fontFamily: "Georgia,'Times New Roman',serif", fontSize: 34, fontWeight: 700, lineHeight: 1.2, letterSpacing: "-0.02em", marginBottom: 12 }}>
+                Find out how much you could <span style={{ color: "#6abf69", fontStyle: "italic" }}>save</span> on electricity
+              </h1>
+              <p style={{ fontSize: 15, color: "#888", lineHeight: 1.6, maxWidth: 380, margin: "0 auto 0" }}>
+                Upload up to 3 bills for a more accurate comparison. Uses 2026 ERSE official tariffs.
+              </p>
             </div>
 
-            <label style={s.dropZone(dragOver, uploadedFiles.length>0)}
-              onDragOver={e=>{e.preventDefault();setDragOver(true);}}
-              onDragLeave={()=>setDragOver(false)}
-              onDrop={e=>{e.preventDefault();setDragOver(false);const files=Array.from(e.dataTransfer.files).slice(0,3);if(files.length)processFiles(files);}}>
-              <input ref={fileInputRef} type="file" style={{display:"none"}} accept=".pdf,.png,.jpg,.jpeg,.webp" multiple onChange={e=>{const files=Array.from(e.target.files??[]).slice(0,3);if(files.length)processFiles(files);}}/>
-              <div style={s.dropIcon}>{uploadedFiles.length>0?"✅":"📄"}</div>
-              <div style={s.dropTitle}>
-                {uploadedFiles.length>0 ? `${uploadedFiles.length} invoice${uploadedFiles.length>1?"s":""} ready` : "Drop up to 3 electricity bills here"}
-              </div>
-              <div style={s.dropSub}>{uploadedFiles.length>0 ? "Click to change" : "PDF, PNG or JPG · up to 3 files · 10 MB each"}</div>
-              {uploadedFiles.length>0&&(
-                <div style={s.fileList} onClick={e=>e.preventDefault()}>
-                  {uploadedFiles.map((f,i)=>(
-                    <div key={i} style={s.fileItem}>
+            {/* Drop zone */}
+            <label
+              style={{ border: `2px dashed ${dragOver || uploadedFiles.length > 0 ? "#6abf69" : "#d5d2c8"}`, borderRadius: 20, padding: "44px 32px", textAlign: "center", cursor: "pointer", background: dragOver ? "#f7fdf7" : uploadedFiles.length > 0 ? "#f7fdf7" : "white", transition: "all 0.2s ease", marginBottom: 12, display: "block" }}
+              onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={e => { e.preventDefault(); setDragOver(false); const f = Array.from(e.dataTransfer.files).slice(0, 3); if (f.length) processFiles(f); }}
+            >
+              <input ref={fileInputRef} type="file" style={{ display: "none" }} accept=".pdf,.png,.jpg,.jpeg,.webp" multiple onChange={e => { const f = Array.from(e.target.files ?? []).slice(0, 3); if (f.length) processFiles(f); }} />
+              <div style={{ width: 52, height: 52, borderRadius: 14, background: "#f0faf0", border: "1px solid #c8e6c8", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, margin: "0 auto 14px" }}>{uploadedFiles.length > 0 ? "✅" : "📄"}</div>
+              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>{uploadedFiles.length > 0 ? `${uploadedFiles.length} invoice${uploadedFiles.length > 1 ? "s" : ""} ready` : "Drop up to 3 electricity bills here"}</div>
+              <div style={{ fontSize: 13, color: "#aaa" }}>PDF, PNG or JPG · up to 3 files · 10 MB each</div>
+              {uploadedFiles.length > 0 && (
+                <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 6 }}>
+                  {uploadedFiles.map((f, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "white", border: "1px solid #c8e6c8", borderRadius: 10, padding: "8px 14px", fontSize: 13 }} onClick={e => e.preventDefault()}>
                       <span>📄 {f.name}</span>
-                      <span style={{color:"#aaa",fontSize:12}}>{(f.size/1024).toFixed(0)} KB</span>
+                      <span style={{ color: "#aaa", fontSize: 12 }}>{(f.size / 1024).toFixed(0)} KB</span>
                     </div>
                   ))}
                 </div>
               )}
             </label>
 
-            <a style={s.manualLink} onClick={()=>setStep("form")}>Enter details manually instead →</a>
-            <a style={s.agentLink} onClick={()=>router.push("/signup")}>Join the monthly switching agent →</a>
+            {/* Trust chips */}
+            <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+              <span className="trust-chip">⚡ ERSE official data</span>
+              <span className="trust-chip">🏢 15 suppliers</span>
+              <span className="trust-chip">✓ Free</span>
+            </div>
+
+            <a style={{ display: "block", textAlign: "center", padding: 12, fontSize: 14, color: "#6abf69", fontWeight: 500, cursor: "pointer" }} onClick={() => setStep("form")}>Enter details manually instead →</a>
+
+            {/* Agent CTA — proper pill */}
+            <div style={{ textAlign: "center", marginTop: 8 }}>
+              <button onClick={() => router.push("/signup")} style={{ padding: "9px 20px", background: "white", color: "#888", border: "1.5px solid #e8e6df", borderRadius: 20, fontSize: 13, fontWeight: 500, fontFamily: "inherit", cursor: "pointer" }}>
+                🤖 Join the monthly switching agent
+              </button>
+            </div>
           </div>
         )}
 
-        {/* FORM */}
-        {step==="form"&&(
-          <div>
-            {extractMsg&&(
-              <div style={s.extractBanner}>
-                <span>✅</span>
-                <span><strong>Invoices read.</strong> {extractMsg}</span>
+        {/* ── FORM ── */}
+        {step === "form" && (
+          <div className="vw-fade">
+            {extractMsg && (
+              <div style={{ background: "#f0faf0", border: "1px solid #c8e6c8", borderRadius: 14, padding: "14px 18px", display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 20, fontSize: 14, color: "#3a7a3a" }}>
+                <span>✅</span><span><strong>Invoices read.</strong> {extractMsg}</span>
               </div>
             )}
-            {userPrefilled&&!extractMsg&&(
-              <div style={s.extractBanner}>
-                <span>👤</span>
-                <span><strong>Details pre-filled</strong> from your agent profile. Adjust if needed.</span>
+            {userPrefilled && !extractMsg && (
+              <div style={{ background: "#f0faf0", border: "1px solid #c8e6c8", borderRadius: 14, padding: "14px 18px", display: "flex", gap: 10, marginBottom: 20, fontSize: 14, color: "#3a7a3a" }}>
+                <span>👤</span><span><strong>Pre-filled</strong> from your agent profile. Adjust if needed.</span>
               </div>
             )}
 
-            {/* Contract basics */}
-            <div style={s.card}>
-              <div style={s.cardTitle}>Your contract</div>
-              <div style={s.formGrid}>
-                <div><label style={s.label}>Current supplier</label>
-                  <select style={s.input(userPrefilled)} value={form.supplier} onChange={e=>setForm(f=>({...f,supplier:e.target.value}))}>
-                    <option value="">Select…</option>{SUPPLIERS.map(sup=><option key={sup}>{sup}</option>)}
-                  </select></div>
-                <div><label style={s.label}>Contracted power</label>
-                  <select style={s.input(userPrefilled)} value={form.powerKva} onChange={e=>setForm(f=>({...f,powerKva:parseFloat(e.target.value)}))}>
-                    {POWERS.map(p=><option key={p} value={p}>{p} kVA</option>)}
-                  </select></div>
-                <div style={{gridColumn:"1/-1"}}><label style={s.label}>Tariff cycle</label>
-                  <select style={s.input()} value={form.tariff} onChange={e=>setForm(f=>({...f,tariff:e.target.value}))}>
-                    <option value="simple">Simple (single rate)</option>
-                    <option value="bihorario">Bi-hourly (peak / off-peak)</option>
-                    <option value="trihorario">Tri-hourly</option>
-                  </select></div>
+            {/* Section 1 — Supplier */}
+            <div style={{ background: "white", border: "1px solid #e8e6df", borderRadius: 20, padding: 24, marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "#bbb", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 16 }}>1 · Current supplier</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                {SUPPLIERS.map(sup => (
+                  <button key={sup.id} className={`vw-supplier-card${form.supplier === sup.id ? " active" : ""}`}
+                    style={form.supplier === sup.id ? { borderColor: sup.color } : {}}
+                    onClick={() => setForm(f => ({ ...f, supplier: sup.id }))}>
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: form.supplier === sup.id ? sup.color : "#f5f5f2", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: form.supplier === sup.id ? "white" : "#888", transition: "all 0.15s" }}>
+                      {sup.id.slice(0, 3).toUpperCase()}
+                    </div>
+                    <span style={{ color: form.supplier === sup.id ? "#1a1a1a" : "#888" }}>{sup.label}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Monthly consumption — up to 3 months */}
-            <div style={s.card}>
-              <div style={s.cardTitle}>Monthly usage — enter up to 3 months</div>
-              <div style={{fontSize:12,color:"#aaa",marginBottom:16}}>We'll average them for a more accurate comparison.</div>
-              {months.map((m,i)=>(
-                <div key={i} style={s.monthRow}>
+            {/* Section 2 — Power */}
+            <div style={{ background: "white", border: "1px solid #e8e6df", borderRadius: 20, padding: 24, marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "#bbb", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 16 }}>2 · Contracted power</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {POWERS.map(p => (
+                  <button key={p} className={`vw-pill-kva${form.powerKva === p ? " active" : ""}`} onClick={() => setForm(f => ({ ...f, powerKva: p }))}>
+                    {p} kVA
+                  </button>
+                ))}
+              </div>
+              <div style={{ marginTop: 12, fontSize: 12, color: "#aaa" }}>Most homes use <strong style={{ color: "#888" }}>3.45</strong> or <strong style={{ color: "#888" }}>6.9 kVA</strong>. Check your bill if unsure.</div>
+            </div>
+
+            {/* Section 3 — Monthly usage */}
+            <div style={{ background: "white", border: "1px solid #e8e6df", borderRadius: 20, padding: 24, marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "#bbb", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>3 · Monthly usage</div>
+              <div style={{ fontSize: 12, color: "#aaa", marginBottom: 16 }}>Up to 3 months — we average them for accuracy.</div>
+              {months.map((m, i) => (
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10, alignItems: "end" }}>
                   <div>
-                    {i===0&&<label style={s.label}>Month</label>}
-                    <input style={s.input()} value={m.month} onChange={e=>{const u=[...months];u[i]={...u[i],month:e.target.value};setMonths(u);}} placeholder={`Month ${i+1}`}/>
+                    {i === 0 && <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#888", marginBottom: 6 }}>Month</label>}
+                    <input style={{ width: "100%", border: "1.5px solid #e8e6df", borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", color: "#1a1a1a", background: "white", outline: "none", boxSizing: "border-box" }}
+                      value={m.label} onChange={e => { const u = [...months]; u[i] = { ...u[i], label: e.target.value }; setMonths(u); }} />
                   </div>
                   <div>
-                    {i===0&&<label style={s.label}>Consumption (kWh)</label>}
-                    <input style={s.input(!!(extracted as any).kwhMonth&&i===0)} type="number" value={m.kwh} onChange={e=>{const u=[...months];u[i]={...u[i],kwh:e.target.value};setMonths(u);}} placeholder="e.g. 239"/>
+                    {i === 0 && <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#888", marginBottom: 6 }}>kWh used</label>}
+                    <input type="number" placeholder="e.g. 239"
+                      style={{ width: "100%", border: `1.5px solid ${m.kwh ? "#c8e6c8" : "#e8e6df"}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", color: "#1a1a1a", background: m.kwh ? "#f7fdf7" : "white", outline: "none", boxSizing: "border-box" }}
+                      value={m.kwh} onChange={e => { const u = [...months]; u[i] = { ...u[i], kwh: e.target.value }; setMonths(u); }} />
                   </div>
                   <div>
-                    {i===0&&<label style={s.label}>Total bill (€)</label>}
-                    <input style={s.input(!!(extracted as any).billTotal&&i===0)} type="number" value={m.bill} onChange={e=>{const u=[...months];u[i]={...u[i],bill:e.target.value};setMonths(u);}} placeholder="e.g. 69.23" step="0.01"/>
+                    {i === 0 && <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#888", marginBottom: 6 }}>Total bill €</label>}
+                    <input type="number" step="0.01" placeholder="e.g. 69.23"
+                      style={{ width: "100%", border: `1.5px solid ${m.bill ? "#c8e6c8" : "#e8e6df"}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", color: "#1a1a1a", background: m.bill ? "#f7fdf7" : "white", outline: "none", boxSizing: "border-box" }}
+                      value={m.bill} onChange={e => { const u = [...months]; u[i] = { ...u[i], bill: e.target.value }; setMonths(u); }} />
                   </div>
                 </div>
               ))}
-              {months.filter(m=>m.kwh&&m.bill).length>1&&(
-                <div style={{fontSize:12,color:"#6abf69",marginTop:4}}>
-                  ✓ Using average of {months.filter(m=>m.kwh&&m.bill).length} months — {getAverages().kwhMonth.toFixed(0)} kWh/month · €{getAverages().currentBill.toFixed(2)}/month
+              {filledMonths > 1 && (
+                <div style={{ fontSize: 12, color: "#6abf69", marginTop: 6, fontWeight: 500 }}>
+                  ✓ Averaging {filledMonths} months — {getAverages().kwhMonth.toFixed(0)} kWh · €{getAverages().currentBill.toFixed(2)}/month
                 </div>
               )}
             </div>
 
-            {/* Price components — expandable */}
-            <div style={s.card}>
-              <button style={s.expandToggle} onClick={()=>setShowComponents(!showComponents)}>
-                <span>{showComponents?"▾":"▸"}</span>
-                <span>Price components from your bill (optional but improves accuracy)</span>
+            {/* Section 4 — Tariff + optional components */}
+            <div style={{ background: "white", border: "1px solid #e8e6df", borderRadius: 20, padding: 24, marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "#bbb", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 16 }}>4 · Tariff & pricing details</div>
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#888", marginBottom: 6 }}>Tariff cycle</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {[["simple", "Simple"], ["bihorario", "Bi-hourly"], ["trihorario", "Tri-hourly"]].map(([val, lbl]) => (
+                    <button key={val} className={`vw-pill-kva${form.tariff === val ? " active" : ""}`} onClick={() => setForm(f => ({ ...f, tariff: val }))}>
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button style={{ background: "none", border: "none", fontSize: 13, color: "#6abf69", fontWeight: 500, cursor: "pointer", fontFamily: "inherit", padding: 0, display: "flex", alignItems: "center", gap: 6 }} onClick={() => setShowComponents(!showComponents)}>
+                <span>{showComponents ? "▾" : "▸"}</span> Price components from bill (optional — improves accuracy)
               </button>
-              {showComponents&&(
-                <div style={{marginTop:14}}>
-                  <div style={{fontSize:12,color:"#aaa",marginBottom:14,lineHeight:1.6}}>
-                    Find these on your bill: the energy price (€/kWh) and the fixed daily power charge. Adding these helps identify whether a switch saves you on energy, fixed costs, or both.
+              {showComponents && (
+                <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#888", marginBottom: 6 }}>Energy price (€/kWh)</label>
+                    <input type="number" step="0.0001" placeholder="e.g. 0.1127"
+                      style={{ width: "100%", border: "1.5px solid #e8e6df", borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
+                      value={components.pricePerKwh} onChange={e => setComponents(c => ({ ...c, pricePerKwh: e.target.value }))} />
+                    <div style={{ fontSize: 11, color: "#aaa", marginTop: 4 }}>Commercial portion only (Comercialização section)</div>
                   </div>
-                  <div style={s.formGrid}>
-                    <div><label style={s.label}>Energy price (€/kWh)</label>
-                      <input style={s.input(!!components.pricePerKwh)} type="number" step="0.0001" value={components.pricePerKwh} onChange={e=>setComponents(c=>({...c,pricePerKwh:e.target.value}))} placeholder="e.g. 0.1127"/></div>
-                    <div><label style={s.label}>Fixed monthly charge (€)</label>
-                      <input style={s.input(!!components.fixedMonthly)} type="number" step="0.01" value={components.fixedMonthly} onChange={e=>setComponents(c=>({...c,fixedMonthly:e.target.value}))} placeholder="e.g. 6.55"/></div>
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#888", marginBottom: 6 }}>Fixed monthly charge (€)</label>
+                    <input type="number" step="0.01" placeholder="e.g. 6.55"
+                      style={{ width: "100%", border: "1.5px solid #e8e6df", borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
+                      value={components.fixedMonthly} onChange={e => setComponents(c => ({ ...c, fixedMonthly: e.target.value }))} />
+                    <div style={{ fontSize: 11, color: "#aaa", marginTop: 4 }}>Potência Contratada from Comercialização</div>
                   </div>
                 </div>
               )}
             </div>
 
-            <button style={s.btnPrimary} onClick={handleCompare}>Compare with the market →</button>
-            <button style={s.btnGhost} onClick={()=>setStep("upload")}>← Back</button>
+            <button style={{ width: "100%", padding: "16px 24px", background: "#1a1a1a", color: "white", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }} onClick={handleCompare}>
+              Compare with the market →
+            </button>
+            <button style={{ width: "100%", padding: "13px 24px", background: "white", color: "#888", border: "1.5px solid #e8e6df", borderRadius: 14, fontSize: 14, fontWeight: 500, fontFamily: "inherit", cursor: "pointer", marginTop: 10 }} onClick={() => setStep("upload")}>
+              ← Back
+            </button>
           </div>
         )}
 
-        {/* LOADING */}
-        {step==="loading"&&(
-          <div style={s.loadingWrap}>
-            <div className="vw-spinner"/>
-            <h2 style={s.loadingTitle}>On it</h2>
-            <p style={s.loadingSub}>{loadMsg}</p>
+        {/* ── LOADING ── */}
+        {step === "loading" && (
+          <div className="vw-fade" style={{ padding: "80px 0", textAlign: "center" }}>
+            <div style={{ width: 52, height: 52, border: "2.5px solid #e8e6df", borderTopColor: "#6abf69", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 32px" }} />
+            <h2 style={{ fontFamily: "Georgia,serif", fontSize: 22, fontWeight: 600, marginBottom: 28 }}>On it</h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 300, margin: "0 auto", textAlign: "left" }}>
+              {LOADING_STEPS.map((msg, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, opacity: loadStep >= i ? 1 : 0.25, transition: "opacity 0.4s" }}>
+                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: loadDone[i] ? "#6abf69" : loadStep === i ? "#1a1a1a" : "#e8e6df", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "white", flexShrink: 0, transition: "background 0.3s" }}>
+                    {loadDone[i] ? <span className="vw-check">✓</span> : loadStep === i ? "…" : ""}
+                  </div>
+                  <span style={{ fontSize: 14, color: loadDone[i] ? "#1a1a1a" : loadStep === i ? "#1a1a1a" : "#aaa", fontWeight: loadStep === i ? 500 : 400, transition: "color 0.3s" }}>{msg}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
-        {/* RESULTS */}
-        {step==="results"&&results&&(
-          <div>
-            <div style={{marginBottom:28}}>
-              <h2 style={{fontFamily:"Georgia,serif",fontSize:28,fontWeight:700,letterSpacing:"-0.02em",marginBottom:4}}>Here&apos;s what we found</h2>
-              <p style={{fontSize:13,color:"#aaa"}}>Based on 2026 ERSE tariffs · {new Date().toLocaleDateString("en-GB",{month:"long",year:"numeric"})}</p>
+        {/* ── RESULTS ── */}
+        {step === "results" && results && (
+          <div className="vw-fade">
+            <div style={{ marginBottom: 24 }}>
+              <h2 style={{ fontFamily: "Georgia,serif", fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 4 }}>Here&apos;s what we found</h2>
+              <p style={{ fontSize: 13, color: "#aaa" }}>Based on 2026 ERSE tariffs · {new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric" })}</p>
             </div>
 
             {/* Savings hero */}
-            <div style={s.savingsHero}>
-              <div style={s.savingsLabel}>Potential annual saving</div>
-              <div style={s.savingsAmount}>{EUR(results.summary.potentialSaving)}</div>
-              <div style={s.savingsPer}>by switching to <span style={{color:"#6abf69",fontWeight:600}}>{results.summary.bestProvider}</span></div>
-              <div style={s.savingsGrid}>
-                <div style={s.savingsStat}>
-                  <div style={s.savingsStatLabel}>You pay now</div>
-                  <div style={s.savingsStatValue}>{EUR(results.summary.currentAnnualCost)}/yr</div>
-                  <div style={s.savingsStatSub}>{results.currentSupplier||"Current supplier"}</div>
-                </div>
-                <div style={s.savingsStat}>
-                  <div style={s.savingsStatLabel}>Best offer</div>
-                  <div style={s.savingsStatValue}>{EUR(results.summary.bestAnnualCost)}/yr</div>
-                  <div style={s.savingsStatSub}>{results.summary.bestProvider} · {results.summary.savingPercent.toFixed(0)}% less</div>
-                </div>
+            <div style={{ background: "#1a1a1a", borderRadius: 24, padding: 28, marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 500, color: "#666", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 6 }}>Potential annual saving</div>
+              <div style={{ fontFamily: "Georgia,serif", fontSize: 64, fontWeight: 700, color: "#6abf69", letterSpacing: "-0.04em", lineHeight: 1, marginBottom: 6 }}>{EUR(results.summary.potentialSaving)}</div>
+              <div style={{ fontSize: 14, color: "#555", marginBottom: 20 }}>by switching to <span style={{ color: "#6abf69", fontWeight: 600 }}>{results.summary.bestProvider}</span></div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                {[
+                  { label: "You pay now", val: `${EUR(results.summary.currentAnnualCost)}/yr`, sub: results.currentSupplier || "Current" },
+                  { label: "Best offer", val: `${EUR(results.summary.bestAnnualCost)}/yr`, sub: `${results.summary.bestProvider} · ${results.summary.savingPercent.toFixed(0)}% less` },
+                ].map(({ label, val, sub }) => (
+                  <div key={label} style={{ background: "rgba(255,255,255,0.05)", borderRadius: 12, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 11, color: "#555", marginBottom: 4 }}>{label}</div>
+                    <div style={{ fontSize: 17, fontWeight: 600, color: "white" }}>{val}</div>
+                    <div style={{ fontSize: 11, color: "#444", marginTop: 2 }}>{sub}</div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Current plan */}
-            <div style={s.currentPlan}>
-              <div style={{fontSize:14,color:"#8a7a50"}}><strong>{results.currentSupplier||"Current supplier"}</strong> · {EUR2(results.currentBill)}/month · {EUR(results.currentBill*12)}/year</div>
-              <div style={s.currentPlanBadge}>Current</div>
+            {/* Current plan pill */}
+            <div style={{ background: "#fffbf0", border: "1px solid #f0e6c0", borderRadius: 14, padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 14, color: "#8a7a50" }}><strong>{results.currentSupplier || "Current"}</strong> · {EUR2(results.currentBill)}/month · {EUR(results.currentBill * 12)}/year</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#8a6a20", background: "#f5d97a", padding: "3px 10px", borderRadius: 20, textTransform: "uppercase", letterSpacing: "0.05em" }}>Current</div>
             </div>
 
-            {/* Consumption adjustment slider */}
-            <div style={s.sliderCard}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                <div style={{fontSize:13,fontWeight:600}}>Adjust expected consumption</div>
-                <div style={{fontSize:13,color:"#6abf69",fontWeight:600}}>{adjustedKwh.toFixed(0)} kWh/month</div>
+            {/* Consumption slider */}
+            <div style={{ background: "white", border: "1px solid #e8e6df", borderRadius: 16, padding: "16px 20px", marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>Adjust expected consumption</div>
+                <div style={{ fontSize: 13, color: "#6abf69", fontWeight: 600 }}>{results.adjustedKwh?.toFixed(0) ?? avgKwh.toFixed(0)} kWh/month</div>
               </div>
               <input type="range" min="0.3" max="1.5" step="0.05" value={consumFactor}
-                onChange={e=>{setConsumFactor(parseFloat(e.target.value));}}
-                onMouseUp={handleCompare} onTouchEnd={handleCompare}/>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#bbb",marginTop:4}}>
-                <span>−70% less</span>
-                <span style={{color:consumFactor===1?"#6abf69":"#aaa"}}>{consumFactor===1?"Current usage":`${consumFactor>1?"+":""}${((consumFactor-1)*100).toFixed(0)}%`}</span>
-                <span>+50% more</span>
+                onChange={e => handleSlider(parseFloat(e.target.value))} />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#bbb", marginTop: 4 }}>
+                <span>−70%</span>
+                <span style={{ color: consumFactor === 1 ? "#6abf69" : "#aaa" }}>{consumFactor === 1 ? "Current usage" : `${consumFactor > 1 ? "+" : ""}${((consumFactor - 1) * 100).toFixed(0)}%`}</span>
+                <span>+50%</span>
               </div>
             </div>
 
             {/* Recommendation */}
-            {results.recommendation&&(
-              <div style={s.recommendation}>
-                <div style={s.recLabel}>Recommendation</div>
-                <p style={{fontSize:14,color:"#555",lineHeight:1.7}}>{results.recommendation}</p>
+            {results.recommendation && (
+              <div style={{ background: "white", border: "1px solid #e8e6df", borderRadius: 14, padding: "16px 20px", marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#bbb", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Recommendation</div>
+                <p style={{ fontSize: 14, color: "#555", lineHeight: 1.7, margin: 0 }}>{results.recommendation}</p>
               </div>
             )}
 
-            {/* Filters */}
-            <div style={s.filters}>
-              <span style={{fontSize:12,color:"#bbb",fontWeight:500}}>Show:</span>
-              {[["all","All offers"],["green","🌱 Green"],["fixed","Fixed price"],["indexed","Indexed"]].map(([f,l])=>(
-                <FilterBtn key={f} label={l} active={filter===f} onClick={()=>setFilter(f)}/>
+            {/* Filters with counts */}
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, color: "#bbb", fontWeight: 500 }}>Show:</span>
+              {([["all", "All"], ["green", "🌱 Green"], ["fixed", "Fixed"], ["indexed", "Indexed"]] as [keyof typeof counts, string][]).map(([f, l]) => (
+                <button key={f} onClick={() => setFilter(f)} style={{ padding: "6px 14px", borderRadius: 20, fontSize: 13, fontWeight: 500, border: `1.5px solid ${filter === f ? "#1a1a1a" : "#e8e6df"}`, background: filter === f ? "#1a1a1a" : "white", color: filter === f ? "white" : "#888", cursor: "pointer", fontFamily: "inherit" }}>
+                  {l} <span style={{ opacity: 0.6, fontSize: 11 }}>({counts[f]})</span>
+                </button>
               ))}
             </div>
 
             {/* Offer cards */}
             <div>
-              {filteredOffers.map((o:any,i:number)=>{
-                const isBest=i===0&&o.annualSaving>0;
-                const isCurrent=results.currentSupplier?.toLowerCase()===o.provider.toLowerCase();
-                const isOpen=expanded.has(o.id);
-                const bg=PC[o.provider]??"#374151";
-                const cardType=isBest?"best":isCurrent?"current":"normal";
+              {filteredOffers.map((o: any, i: number) => {
+                const isBest    = i === 0 && o.annualSaving > 0;
+                const isCurrent = results.currentSupplier?.toLowerCase() === o.provider.toLowerCase();
+                const isOpen    = expanded.has(o.id);
+                const bg        = PC[o.provider] ?? "#374151";
                 return (
-                  <div key={o.id} style={s.offerCard(cardType)} onClick={()=>toggle(o.id)}>
-                    <div style={s.offerTop}>
-                      <div style={s.offerLeft}>
-                        <div style={s.offerLogo(bg)}>{o.provider.slice(0,3).toUpperCase()}</div>
+                  <div key={o.id} className={`vw-offer-card${isBest ? " best" : isCurrent ? " current" : ""}`}>
+                    {/* Top row */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flex: 1 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "white", flexShrink: 0, background: bg }}>{o.provider.slice(0, 3).toUpperCase()}</div>
                         <div>
-                          <div style={s.offerName}>{o.name}</div>
-                          <div style={s.offerProvider}>{o.provider}</div>
+                          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>{o.name}</div>
+                          <div style={{ fontSize: 12, color: "#aaa" }}>{o.provider}</div>
                         </div>
                       </div>
-                      <div style={s.offerRight}>
-                        <div style={s.offerPrice}>{EUR2(o.monthlyEstimate)}<span style={{fontSize:12,fontWeight:400,color:"#aaa",fontFamily:"inherit"}}>/mo</span></div>
-                        <div style={s.offerYear}>{EUR(o.annualEstimate)}/year</div>
-                        {o.annualSaving!==0&&<div style={{fontSize:13,fontWeight:600,marginTop:3,color:o.annualSaving>0?"#6abf69":"#e05a5a"}}>{o.annualSaving>0?`Save ${EUR(o.annualSaving)}/yr`:`+${EUR(Math.abs(o.annualSaving))}/yr`}</div>}
+                      <div style={{ textAlign: "right", flexShrink: 0 }}>
+                        <div style={{ fontFamily: "Georgia,serif", fontSize: 22, fontWeight: 600 }}>{EUR2(o.monthlyEstimate)}<span style={{ fontSize: 12, fontWeight: 400, color: "#aaa", fontFamily: "inherit" }}>/mo</span></div>
+                        <div style={{ fontSize: 12, color: "#aaa", marginTop: 1 }}>{EUR(o.annualEstimate)}/yr</div>
                       </div>
                     </div>
-                    <div style={s.offerTags}>
-                      {isBest&&<span style={s.tag("best")}>Best deal</span>}
-                      {isCurrent&&<span style={s.tag("current")}>Your plan</span>}
-                      {o.green&&<span style={s.tag("green")}>🌱 Renewable</span>}
-                      <span style={s.tag(o.type==="indexed"?"indexed":"fixed")}>{o.type==="indexed"?"Indexed":"Fixed price"}</span>
+
+                    {/* Tags + saving badge + switch btn — always visible */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                        {isBest    && <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 20, fontWeight: 600, background: "#6abf69", color: "white" }}>Best deal</span>}
+                        {isCurrent && <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 20, fontWeight: 600, background: "#f5d97a", color: "#8a6a20" }}>Your plan</span>}
+                        {o.green   && <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 20, fontWeight: 500, background: "#f0faf0", color: "#4a9f4a" }}>🌱 Renewable</span>}
+                        <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 20, fontWeight: 500, background: o.type === "indexed" ? "#fff8ee" : "#eef4ff", color: o.type === "indexed" ? "#bf8a4a" : "#4a6abf" }}>{o.type === "indexed" ? "Indexed" : "Fixed price"}</span>
+                        {o.annualSaving > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: "#6abf69" }}>Save {EUR(o.annualSaving)}/yr</span>}
+                        {o.annualSaving < 0 && <span style={{ fontSize: 12, fontWeight: 700, color: "#e05a5a" }}>+{EUR(Math.abs(o.annualSaving))}/yr</span>}
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button className="vw-expand-btn" onClick={() => toggle(o.id)}>{isOpen ? "Less ▲" : "Details ▾"}</button>
+                        <button className="vw-switch-btn" onClick={() => window.open(o.contactUrl, "_blank")}>Switch →</button>
+                      </div>
                     </div>
-                    {isOpen&&(
-                      <div style={s.detailsSection}>
+
+                    {/* Expanded details */}
+                    {isOpen && (
+                      <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid #f0ede6" }}>
                         {/* Cost breakdown bar */}
-                        {o.breakdown&&(
-                          <BreakdownBar
-                            fixed={o.breakdown.powerFixed}
-                            variable={o.breakdown.energyVariable}
-                            taxes={o.breakdown.taxes}
-                          />
-                        )}
-                        <div style={s.detailsGrid}>
+                        {o.breakdown && (() => {
+                          const { powerFixed: fixed, energyVariable: variable, taxes } = o.breakdown;
+                          const total = fixed + variable + taxes;
+                          return (
+                            <div style={{ marginBottom: 14 }}>
+                              <div style={{ display: "flex", height: 6, borderRadius: 6, overflow: "hidden", gap: 2, marginBottom: 6 }}>
+                                <div style={{ width: `${(fixed / total * 100).toFixed(0)}%`, background: "#6abf69", borderRadius: "6px 0 0 6px" }} />
+                                <div style={{ width: `${(variable / total * 100).toFixed(0)}%`, background: "#f7a800" }} />
+                                <div style={{ width: `${(taxes / total * 100).toFixed(0)}%`, background: "#ccc", borderRadius: "0 6px 6px 0" }} />
+                              </div>
+                              <div style={{ display: "flex", gap: 14, fontSize: 11, color: "#888" }}>
+                                <span style={{ color: "#3a7a3a" }}>⬤ Fixed {(fixed / total * 100).toFixed(0)}% ({EUR2(fixed)})</span>
+                                <span style={{ color: "#a07000" }}>⬤ Energy {(variable / total * 100).toFixed(0)}% ({EUR2(variable)})</span>
+                                <span style={{ color: "#999" }}>⬤ Taxes {(taxes / total * 100).toFixed(0)}% ({EUR2(taxes)})</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
                           {[
-                            ["Commercial kWh price", `${EUR4(o.commercialPricePerKwh)} €/kWh`],
-                            ["Commercial power/day", `${EUR4(o.commercialPowerPerDay)} €/day`],
-                            ["1st yr discount",  o.firstYearDiscount>0?`${(o.firstYearDiscount*100).toFixed(0)}%`:"—"],
-                            ["Price type",       o.type==="indexed"?"OMIE indexed":"Fixed"],
-                            ["Green energy",     o.green?"Yes (100%)":"No"],
-                            ["Grid access",      "ERSE 2026 (all suppliers)"],
-                          ].map(([l,v])=>(
-                            <div key={l} style={s.detailCell}>
-                              <div style={s.detailLabel}>{l}</div>
-                              <div style={s.detailValue}>{v}</div>
+                            ["Energy price", `${(o.commercialPricePerKwh * 100).toFixed(3)} c€/kWh`],
+                            ["Power charge", `${(o.commercialPowerPerDay).toFixed(4)} €/day`],
+                            ["1st yr discount", o.firstYearDiscount > 0 ? `${(o.firstYearDiscount * 100).toFixed(0)}%` : "—"],
+                            ["Price type", o.type === "indexed" ? "OMIE indexed" : "Fixed"],
+                            ["Green energy", o.green ? "Yes (100%)" : "No"],
+                            ["Grid access", "ERSE 2026"],
+                          ].map(([l, v]) => (
+                            <div key={l} style={{ background: "#fafaf7", borderRadius: 10, padding: "10px 12px" }}>
+                              <div style={{ fontSize: 10, color: "#bbb", marginBottom: 3 }}>{l}</div>
+                              <div style={{ fontSize: 13, fontWeight: 600 }}>{v}</div>
                             </div>
                           ))}
                         </div>
-                        <button style={s.switchBtn} onClick={e=>{e.stopPropagation();window.open(o.contactUrl,"_blank")}}>Switch to {o.provider} →</button>
                       </div>
                     )}
                   </div>
@@ -573,13 +615,17 @@ export default function Home() {
               })}
             </div>
 
-            <div style={s.footerNote}>
-              Calculations use 2026 ERSE-approved network access tariffs (Diretiva n.º 1/2026).<br/>
-              Commercial prices from <a href="https://simuladorprecos.erse.pt/eletricidade/" target="_blank" rel="noopener" style={{color:"#6abf69"}}>ERSE official simulator</a>. Review contract terms before switching.
+            <div style={{ fontSize: 12, color: "#bbb", textAlign: "center", paddingTop: 24, borderTop: "1px solid #f0ede6", marginTop: 24, lineHeight: 1.7 }}>
+              Calculations use 2026 ERSE tariffs (Diretiva n.º 1/2026).<br />
+              Commercial prices from <a href="https://simuladorprecos.erse.pt/eletricidade/" target="_blank" rel="noopener" style={{ color: "#6abf69" }}>ERSE official simulator</a>. Review contract terms before switching.
             </div>
-            <button style={{...s.btnGhost,marginTop:16}} onClick={()=>{setStep("upload");setResults(null);setExtracted({});setExtractMsg("");setUploadedFiles([]);setConsumFactor(1.0);}}>← Start a new comparison</button>
+            <button style={{ width: "100%", padding: "13px 24px", background: "white", color: "#888", border: "1.5px solid #e8e6df", borderRadius: 14, fontSize: 14, fontWeight: 500, fontFamily: "inherit", cursor: "pointer", marginTop: 16 }}
+              onClick={() => { setStep("upload"); setResults(null); setExtracted({}); setExtractMsg(""); setUploadedFiles([]); setConsumFactor(1.0); }}>
+              ← Start a new comparison
+            </button>
           </div>
         )}
+
       </div>
     </div>
   );
