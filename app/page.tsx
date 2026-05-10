@@ -96,7 +96,7 @@ export default function Home(){
     return{kwhMonth:filled.reduce((s,m)=>s+parseFloat(m.kwh),0)/filled.length,currentBill:filled.reduce((s,m)=>s+parseFloat(m.bill),0)/filled.length};
   }
 
-  function animateSteps(setSt:(n:number)=>void,setDn:(d:boolean[])=>void,count:number,interval=900){
+  function animateSteps(setSt:(n:number)=>void,setDn:(d:boolean[]|((prev:boolean[])=>boolean[]))=>void,count:number,interval=900){
     let i=0;setSt(0);setDn(Array(count).fill(false));
     const tick=()=>{setDn((d:boolean[])=>{const n=[...d];n[i]=true;return n;});;i++;if(i<count)setTimeout(tick,interval);};
     setTimeout(tick,interval);
