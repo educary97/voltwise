@@ -1,10 +1,10 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-
+ 
 type Step = "upload" | "validating" | "form" | "comparing" | "results";
 type ExtractionStatus = "idle"|"success"|"partial"|"not_a_bill"|"unreadable"|"api_error"|"wrong_country";
-
+ 
 const POWERS    = [1.15,2.3,3.45,4.6,5.75,6.9,10.35,13.8,17.25,20.7];
 const SUPPLIERS = [
   {id:"EDP",color:"#003c8f"},{id:"Endesa",color:"#00a651"},{id:"Galp",color:"#e30613"},
@@ -14,13 +14,13 @@ const SUPPLIERS = [
 const PC:Record<string,string> = Object.fromEntries(SUPPLIERS.map(s=>[s.id,s.color]));
 const EUR  = (n:number)=>new Intl.NumberFormat("en-GB",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);
 const EUR2 = (n:number)=>new Intl.NumberFormat("en-GB",{style:"currency",currency:"EUR",minimumFractionDigits:2}).format(n);
-
+ 
 const VALIDATION_STEPS = ["Checking file format…","Reading invoice with AI…","Verifying it's a Portuguese electricity bill…","Extracting tariff data…"];
 const COMPARE_STEPS    = ["Fetching 2026 ERSE tariffs…","Interrogating 15 suppliers…","Ranking all offers…","Writing your recommendation…"];
-
+ 
 interface MonthData{label:string;kwh:string;bill:string;}
 interface ExtractionResult{status:ExtractionStatus;data?:any;missingFields?:string[];message?:string;}
-
+ 
 function classifyExtraction(data:any):ExtractionResult{
   const hasBillSignals = data.supplier||data.billTotal||data.kwhMonth;
   if(!hasBillSignals){
@@ -43,13 +43,13 @@ function classifyExtraction(data:any):ExtractionResult{
   if(missing.length>0)  return{status:"partial",data,missingFields:missing,message:"Read successfully — fill in the missing fields below."};
   return{status:"success",data};
 }
-
+ 
 export default function Home(){
   const router=useRouter();
   const fileInputRef=useRef<HTMLInputElement>(null);
   const sliderTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const compareAbort=useRef<AbortController|null>(null);
-
+ 
   const[step,setStep]=useState<Step>("upload");
   const[uploadedFiles,setUploadedFiles]=useState<File[]>([]);
   const[extraction,setExtraction]=useState<ExtractionResult|null>(null);
@@ -72,7 +72,7 @@ export default function Home(){
   const[userName,setUserName]=useState<string|null>(null);
   const[userPrefilled,setUserPrefilled]=useState(false);
   const[isRefining,setIsRefining]=useState(false);
-
+ 
   useEffect(()=>{
     setTimeout(()=>setVisible(true),50);
     const email=localStorage.getItem("voltwise_user_email");
@@ -87,21 +87,21 @@ export default function Home(){
       }).catch(()=>{});
     }
   },[]);
-
+ 
   const toggle=(id:number)=>setExpanded(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
-
+ 
   function getAverages(){
     const filled=months.filter(m=>m.kwh&&m.bill);
     if(!filled.length)return{kwhMonth:0,currentBill:0};
     return{kwhMonth:filled.reduce((s,m)=>s+parseFloat(m.kwh),0)/filled.length,currentBill:filled.reduce((s,m)=>s+parseFloat(m.bill),0)/filled.length};
   }
-
+ 
   function animateSteps(setSt:(n:number)=>void,setDn:(d:boolean[]|((prev:boolean[])=>boolean[]))=>void,count:number,interval=900){
     let i=0;setSt(0);setDn(Array(count).fill(false));
     const tick=()=>{setDn((d:boolean[])=>{const n=[...d];n[i]=true;return n;});;i++;if(i<count)setTimeout(tick,interval);};
     setTimeout(tick,interval);
   }
-
+ 
   function validateFile(file:File):string|null{
     if(file.size>10*1024*1024)return`"${file.name}" is too large (${(file.size/1024/1024).toFixed(1)} MB). Max 10 MB.`;
     const ext="."+file.name.split(".").pop()?.toLowerCase();
@@ -110,7 +110,7 @@ export default function Home(){
     if(!ok.includes(file.type)&&!okExt.includes(ext))return`"${file.name}" is not supported. Please use PDF, JPG, or PNG.`;
     return null;
   }
-
+ 
   async function processFiles(files:File[]){
     setFileError(null);
     for(const f of files){const e=validateFile(f);if(e){setFileError(e);return;}}
@@ -145,7 +145,7 @@ export default function Home(){
     }
     setExtraction(result);setStep("form");
   }
-
+ 
   const runCompare=useCallback(async(factor:number,silent=false)=>{
     const{kwhMonth,currentBill}=getAverages();
     if(!kwhMonth||!currentBill)return;
@@ -168,7 +168,7 @@ export default function Home(){
       if(!silent){setCompareError(err.message??"Comparison failed. Check your connection and try again.");setStep("form");}
     }
   },[form,components,months]);
-
+ 
   async function handleCompare(){
     const{kwhMonth,currentBill}=getAverages();
     if(!kwhMonth||!currentBill){setCompareError("Please enter at least one month's consumption (kWh) and bill total (€).");return;}
@@ -176,26 +176,26 @@ export default function Home(){
     animateSteps(setCompareStep,setCompareDone,4);
     await runCompare(consumFactor);setStep("results");
   }
-
+ 
   function handleSlider(val:number){
     setConsumFactor(val);setIsRefining(true);
     if(sliderTimer.current)clearTimeout(sliderTimer.current);
     sliderTimer.current=setTimeout(()=>runCompare(val,true),600);
   }
-
+ 
   function resetAll(){
     setStep("upload");setResults(null);setExtraction(null);setUploadedFiles([]);
     setFileError(null);setCompareError(null);setConsumFactor(1.0);setIsRefining(false);
     setMonths([{label:"This month",kwh:"",bill:""},{label:"Last month",kwh:"",bill:""},{label:"2 months ago",kwh:"",bill:""}]);
   }
-
+ 
   const stepNum=step==="upload"?1:step==="results"?3:2;
   const filledMonths=months.filter(m=>m.kwh&&m.bill).length;
   const allOffers=results?.offers??[];
   const filteredOffers=allOffers.filter((o:any)=>filter==="all"||(filter==="green"&&o.green)||(filter==="fixed"&&o.type==="fixed")||(filter==="indexed"&&o.type==="indexed"));
   const counts={all:allOffers.length,green:allOffers.filter((o:any)=>o.green).length,fixed:allOffers.filter((o:any)=>o.type==="fixed").length,indexed:allOffers.filter((o:any)=>o.type==="indexed").length};
   const noSavingsFound=results&&allOffers.every((o:any)=>o.annualSaving<=0);
-
+ 
   const extractionBanner=(()=>{
     if(!extraction)return null;
     switch(extraction.status){
@@ -208,7 +208,7 @@ export default function Home(){
       default:return null;
     }
   })();
-
+ 
   const css=`
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
     *{box-sizing:border-box;}
@@ -238,19 +238,19 @@ export default function Home(){
     .chip{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:white;border:1px solid #e8e6df;border-radius:20px;font-size:12px;color:#888;font-weight:500;}
     .refining{animation:pulse 1.2s ease-in-out infinite;}
   `;
-
+ 
   const cardStyle={background:"white",border:"1px solid #e8e6df",borderRadius:20,padding:24,marginBottom:14};
   const secLabel={fontSize:11,fontWeight:600,color:"#bbb",textTransform:"uppercase" as const,letterSpacing:"0.08em",marginBottom:16};
   const lbl={display:"block",fontSize:12,fontWeight:500,color:"#888",marginBottom:6};
   const inp=(green?:boolean):React.CSSProperties=>({width:"100%",border:`1.5px solid ${green?"#c8e6c8":"#e8e6df"}`,borderRadius:10,padding:"10px 12px",fontSize:13,fontFamily:"inherit",background:green?"#f7fdf7":"white",outline:"none",boxSizing:"border-box" as const});
   const btnPrimary=(disabled?:boolean):React.CSSProperties=>({width:"100%",padding:"16px 24px",background:disabled?"#ccc":"#1a1a1a",color:"white",border:"none",borderRadius:14,fontSize:15,fontWeight:600,fontFamily:"inherit",cursor:disabled?"not-allowed":"pointer"});
   const btnGhost:React.CSSProperties={width:"100%",padding:"13px 24px",background:"white",color:"#888",border:"1.5px solid #e8e6df",borderRadius:14,fontSize:14,fontWeight:500,fontFamily:"inherit",cursor:"pointer",marginTop:10};
-
+ 
   return(
     <div style={{fontFamily:"'DM Sans','Helvetica Neue',Arial,sans-serif",background:"#FAFAF7",minHeight:"100vh",color:"#1a1a1a",opacity:visible?1:0,transform:visible?"translateY(0)":"translateY(10px)",transition:"opacity 0.5s ease, transform 0.5s ease"}}>
       <style>{css}</style>
       <div style={{maxWidth:640,margin:"0 auto",padding:"0 20px 80px"}}>
-
+ 
         {/* Header */}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"24px 0 20px",borderBottom:"1px solid #e8e6df",marginBottom:28}}>
           <div style={{fontSize:22,fontWeight:700,letterSpacing:"-0.02em",cursor:"pointer"}} onClick={resetAll}>Voltwise<span style={{color:"#6abf69"}}>.</span></div>
@@ -259,7 +259,7 @@ export default function Home(){
             <div style={{fontSize:11,fontWeight:500,color:"#6abf69",background:"#f0faf0",border:"1px solid #c8e6c8",padding:"4px 12px",borderRadius:20}}>ERSE 2026</div>
           </div>
         </div>
-
+ 
         {/* Steps */}
         <div style={{display:"flex",alignItems:"center",marginBottom:28}}>
           {[["1","Invoice"],["2","Review"],["3","Results"]].map(([n,l],i)=>{
@@ -273,7 +273,7 @@ export default function Home(){
             </div>);
           })}
         </div>
-
+ 
         {/* ── UPLOAD ── */}
         {step==="upload"&&(
           <div className="vw-fade">
@@ -287,7 +287,7 @@ export default function Home(){
               <h1 style={{fontFamily:"Georgia,'Times New Roman',serif",fontSize:34,fontWeight:700,lineHeight:1.2,letterSpacing:"-0.02em",marginBottom:12}}>Find out how much you could <span style={{color:"#6abf69",fontStyle:"italic"}}>save</span> on electricity</h1>
               <p style={{fontSize:15,color:"#888",lineHeight:1.6,maxWidth:380,margin:"0 auto"}}>Upload up to 3 bills for a more accurate comparison.</p>
             </div>
-
+ 
             {/* File error */}
             {fileError&&(
               <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:14,padding:"14px 18px",display:"flex",gap:10,alignItems:"flex-start",marginBottom:16,fontSize:14,color:"#dc2626"}}>
@@ -295,7 +295,7 @@ export default function Home(){
                 <div><strong>File not accepted</strong><br/><span style={{fontSize:13}}>{fileError}</span><div style={{marginTop:6,fontSize:12,color:"#e05a5a"}}>Supported: PDF, JPG, PNG · Max 10 MB each</div></div>
               </div>
             )}
-
+ 
             <label style={{border:`2px dashed ${dragOver?"#6abf69":fileError?"#fca5a5":uploadedFiles.length>0?"#6abf69":"#d5d2c8"}`,borderRadius:20,padding:"44px 32px",textAlign:"center",cursor:"pointer",background:dragOver?"#f7fdf7":fileError?"#fff5f5":uploadedFiles.length>0?"#f7fdf7":"white",transition:"all 0.2s ease",marginBottom:12,display:"block"}}
               onDragOver={e=>{e.preventDefault();setDragOver(true);setFileError(null);}}
               onDragLeave={()=>setDragOver(false)}
@@ -305,7 +305,7 @@ export default function Home(){
               <div style={{fontSize:16,fontWeight:600,marginBottom:6}}>{fileError?"Try a different file":uploadedFiles.length>0?`${uploadedFiles.length} invoice${uploadedFiles.length>1?"s":""} ready`:"Drop up to 3 electricity bills here"}</div>
               <div style={{fontSize:13,color:"#aaa"}}>PDF, PNG or JPG · up to 3 files · 10 MB each</div>
             </label>
-
+ 
             <div style={{display:"flex",justifyContent:"center",gap:8,flexWrap:"wrap",marginBottom:16}}>
               <span className="chip">⚡ ERSE official data</span><span className="chip">🏢 15 suppliers</span><span className="chip">✓ Free</span>
             </div>
@@ -315,7 +315,7 @@ export default function Home(){
             </div>
           </div>
         )}
-
+ 
         {/* ── VALIDATING ── */}
         {step==="validating"&&(
           <div className="vw-fade" style={{padding:"80px 0",textAlign:"center"}}>
@@ -333,7 +333,7 @@ export default function Home(){
             </div>
           </div>
         )}
-
+ 
         {/* ── COMPARING ── */}
         {step==="comparing"&&(
           <div className="vw-fade" style={{padding:"80px 0",textAlign:"center"}}>
@@ -351,7 +351,7 @@ export default function Home(){
             </div>
           </div>
         )}
-
+ 
         {/* ── FORM ── */}
         {step==="form"&&(
           <div className="vw-fade">
@@ -381,7 +381,7 @@ export default function Home(){
                 <span>❌</span><div><strong>Comparison failed</strong><br/><span style={{fontSize:13}}>{compareError}</span></div>
               </div>
             )}
-
+ 
             {/* Supplier */}
             <div style={cardStyle}>
               <div style={secLabel}>1 · Current supplier</div>
@@ -397,7 +397,7 @@ export default function Home(){
                 ))}
               </div>
             </div>
-
+ 
             {/* Power */}
             <div style={cardStyle}>
               <div style={secLabel}>2 · Contracted power</div>
@@ -406,7 +406,7 @@ export default function Home(){
               </div>
               <div style={{marginTop:10,fontSize:12,color:"#aaa"}}>Most homes: <strong style={{color:"#888"}}>3.45</strong> or <strong style={{color:"#888"}}>6.9 kVA</strong></div>
             </div>
-
+ 
             {/* Monthly usage */}
             <div style={cardStyle}>
               <div style={secLabel}>3 · Monthly usage</div>
@@ -421,7 +421,7 @@ export default function Home(){
               {filledMonths>1&&<div style={{fontSize:12,color:"#6abf69",marginTop:6,fontWeight:500}}>✓ Averaging {filledMonths} months — {getAverages().kwhMonth.toFixed(0)} kWh · €{getAverages().currentBill.toFixed(2)}/month</div>}
               {filledMonths===0&&<div style={{fontSize:12,color:"#f59e0b",marginTop:6}}>↑ Fill in at least one month to compare</div>}
             </div>
-
+ 
             {/* Tariff */}
             <div style={cardStyle}>
               <div style={secLabel}>4 · Tariff & pricing</div>
@@ -441,13 +441,13 @@ export default function Home(){
                 </div>
               )}
             </div>
-
+ 
             <button style={btnPrimary(filledMonths===0)} onClick={handleCompare} disabled={filledMonths===0}>Compare with the market →</button>
             {filledMonths===0&&<div style={{fontSize:12,color:"#f59e0b",textAlign:"center",marginTop:8}}>Enter at least one month's kWh and bill total to continue</div>}
             <button style={btnGhost} onClick={()=>setStep("upload")}>← Back</button>
           </div>
         )}
-
+ 
         {/* ── RESULTS ── */}
         {step==="results"&&results&&(
           <div className="vw-fade">
@@ -455,7 +455,7 @@ export default function Home(){
               <h2 style={{fontFamily:"Georgia,serif",fontSize:26,fontWeight:700,letterSpacing:"-0.02em",marginBottom:4}}>Here&apos;s what we found</h2>
               <p style={{fontSize:13,color:"#aaa"}}>Based on 2026 ERSE tariffs · {new Date().toLocaleDateString("en-GB",{month:"long",year:"numeric"})}</p>
             </div>
-
+ 
             {noSavingsFound?(
               <div style={{background:"white",border:"1px solid #e8e6df",borderRadius:20,padding:32,textAlign:"center",marginBottom:20}}>
                 <div style={{fontSize:40,marginBottom:16}}>🏆</div>
@@ -479,12 +479,12 @@ export default function Home(){
                 </div>
               </div>
             )}
-
+ 
             <div style={{background:"#fffbf0",border:"1px solid #f0e6c0",borderRadius:14,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
               <div style={{fontSize:14,color:"#8a7a50"}}><strong>{results.currentSupplier||"Current"}</strong> · {EUR2(results.currentBill)}/month · {EUR(results.currentBill*12)}/year</div>
               <div style={{fontSize:10,fontWeight:700,color:"#8a6a20",background:"#f5d97a",padding:"3px 10px",borderRadius:20,textTransform:"uppercase",letterSpacing:"0.05em"}}>Current</div>
             </div>
-
+ 
             <div style={{background:"white",border:"1px solid #e8e6df",borderRadius:16,padding:"16px 20px",marginBottom:16}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                 <div style={{fontSize:13,fontWeight:600}}>Adjust expected consumption</div>
@@ -500,14 +500,14 @@ export default function Home(){
                 <span>+50%</span>
               </div>
             </div>
-
+ 
             {results.recommendation&&(
               <div style={{background:"white",border:"1px solid #e8e6df",borderRadius:14,padding:"16px 20px",marginBottom:16}}>
                 <div style={{fontSize:11,fontWeight:600,color:"#bbb",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Recommendation</div>
                 <p style={{fontSize:14,color:"#555",lineHeight:1.7,margin:0}}>{results.recommendation}</p>
               </div>
             )}
-
+ 
             {!noSavingsFound&&(
               <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:16,flexWrap:"wrap"}}>
                 <span style={{fontSize:12,color:"#bbb",fontWeight:500}}>Show:</span>
@@ -518,14 +518,14 @@ export default function Home(){
                 ))}
               </div>
             )}
-
+ 
             {filteredOffers.length===0&&!noSavingsFound&&(
               <div style={{background:"white",border:"1px solid #e8e6df",borderRadius:16,padding:24,textAlign:"center",marginBottom:16}}>
                 <div style={{fontSize:32,marginBottom:10}}>🔍</div>
                 <p style={{fontSize:14,color:"#888"}}>No offers match this filter. <button onClick={()=>setFilter("all")} style={{color:"#6abf69",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:600}}>Show all</button></p>
               </div>
             )}
-
+ 
             <div>
               {filteredOffers.map((o:any,i:number)=>{
                 const isBest=i===0&&o.annualSaving>0,isCurrent=results.currentSupplier?.toLowerCase()===o.provider.toLowerCase(),isOpen=expanded.has(o.id),bg=PC[o.provider]??"#374151";
@@ -584,7 +584,7 @@ export default function Home(){
                 );
               })}
             </div>
-
+ 
             <div style={{fontSize:12,color:"#bbb",textAlign:"center",paddingTop:24,borderTop:"1px solid #f0ede6",marginTop:24,lineHeight:1.7}}>
               Calculations use 2026 ERSE tariffs (Diretiva n.º 1/2026).<br/>
               <a href="https://simuladorprecos.erse.pt/eletricidade/" target="_blank" rel="noopener" style={{color:"#6abf69"}}>ERSE official simulator</a> · Review contract terms before switching.
@@ -596,3 +596,4 @@ export default function Home(){
     </div>
   );
 }
+ 
