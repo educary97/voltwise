@@ -537,6 +537,17 @@ export default function Home(){
                         <div><div style={{fontSize:14,fontWeight:600,marginBottom:2}}>{o.name}</div><div style={{fontSize:12,color:"#aaa"}}>{o.provider}</div></div>
                       </div>
                       <div style={{textAlign:"right",flexShrink:0}}>
+                        {o.supermarketBenefit && o.estimatedMonthlyBenefit ? (
+                          <>
+                            <div style={{fontSize:12,color:"#aaa",marginBottom:4}}>
+                              {EUR2(o.monthlyEstimate)} - {EUR2(o.estimatedMonthlyBenefit)} ({o.supermarketBenefit.supermarket})
+                            </div>
+                            <div style={{fontFamily:"Georgia,serif",fontSize:22,fontWeight:600}}>{EUR2(o.estimatedMonthlyEurAfterBenefit || o.monthlyEstimate)}<span style={{fontSize:12,fontWeight:400,color:"#aaa",fontFamily:"inherit"}}>/mo</span></div>
+                          </>
+                        ) : (
+                          <div style={{fontFamily:"Georgia,serif",fontSize:22,fontWeight:600}}>{EUR2(o.monthlyEstimate)}<span style={{fontSize:12,fontWeight:400,color:"#aaa",fontFamily:"inherit"}}>/mo</span></div>
+                        )}
+                        <div style={{fontSize:12,color:"#aaa",marginTop:1}}>{EUR(o.annualEstimate)}/yr</div>
                         <div style={{fontFamily:"Georgia,serif",fontSize:22,fontWeight:600}}>{EUR2(o.monthlyEstimate)}<span style={{fontSize:12,fontWeight:400,color:"#aaa",fontFamily:"inherit"}}>/mo</span></div>
                         <div style={{fontSize:12,color:"#aaa",marginTop:1}}>{EUR(o.annualEstimate)}/yr</div>
                       </div>
