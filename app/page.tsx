@@ -279,13 +279,7 @@ import { averageBills } from '@/lib/utils/averageBills';
         </div>
  
         {/* ── UPLOAD ── */}
-        {!selectedSupermarket ? (
-          <div className="vw-fade">
-            <SupermarketBenefitForm onSubmit={(data) => setSelectedSupermarket(data.supermarket)} isLoading={step==="comparing"} />
-          </div>
-        ) : (
-          <>
-            {step==="upload"&&(
+        {step==="upload"&&(
           <div className="vw-fade">
             {userPrefilled&&userName&&(
               <div style={{background:"#1a1a1a",borderRadius:16,padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
@@ -324,8 +318,6 @@ import { averageBills } from '@/lib/utils/averageBills';
               <button onClick={()=>router.push("/signup")} style={{padding:"9px 20px",background:"white",color:"#888",border:"1.5px solid #e8e6df",borderRadius:20,fontSize:13,fontWeight:500,fontFamily:"inherit",cursor:"pointer"}}>🤖 Join the monthly switching agent</button>
             </div>
           </div>
-        )}
-          </>
         )}
  
         {/* ── VALIDATING ── */}
@@ -367,6 +359,9 @@ import { averageBills } from '@/lib/utils/averageBills';
         {/* ── FORM ── */}
         {step==="form"&&(
           <div className="vw-fade">
+            {!selectedSupermarket && (
+              <SupermarketBenefitForm onSubmit={(data) => setSelectedSupermarket(data.supermarket)} isLoading={false} />
+            )}
             {extractionBanner&&(
               <div style={{background:extractionBanner.bg,border:`1px solid ${extractionBanner.border}`,borderRadius:14,padding:"14px 18px",display:"flex",gap:10,alignItems:"flex-start",marginBottom:20,fontSize:14,color:extractionBanner.color}}>
                 <span style={{flexShrink:0,fontSize:16}}>{extractionBanner.icon}</span>
