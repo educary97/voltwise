@@ -1,5 +1,5 @@
 import { AgentConfig } from "../agentConfig";
-import { getSupplierPartnership } from "../partnerships/monitor";
+import { getSupplierPartnership } from "../supabase";
 
 export interface SupplierOffer {
   supplier: string;
