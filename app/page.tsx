@@ -72,6 +72,7 @@ export default function Home(){
   const[userName,setUserName]=useState<string|null>(null);
   const[userPrefilled,setUserPrefilled]=useState(false);
   const[isRefining,setIsRefining]=useState(false);
+  const[currentBenefit,setCurrentBenefit]=useState<SupermarketBenefitInput|null>(null);
  
   useEffect(()=>{
     setTimeout(()=>setVisible(true),50);
@@ -211,6 +212,8 @@ export default function Home(){
  
   const css=`
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
+import { SupermarketBenefitForm, SupermarketBenefitInput } from '@/lib/components/SupermarketBenefitForm';
+import { averageBills } from '@/lib/utils/averageBills';
     *{box-sizing:border-box;}
     input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;}
     input[type=range]{-webkit-appearance:none;width:100%;height:4px;border-radius:4px;background:#e8e6df;outline:none;}
