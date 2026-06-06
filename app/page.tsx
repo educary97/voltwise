@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { SupermarketBenefitForm, SupermarketBenefitInput } from '@/lib/components/SupermarketBenefitForm';
+import { SupermarketBenefitForm, type Supermarket } from '@/lib/components/SupermarketBenefitForm';
 import { averageBills } from '@/lib/utils/averageBills';
 import { useRouter } from "next/navigation";
  
@@ -74,7 +74,7 @@ export default function Home(){
   const[userName,setUserName]=useState<string|null>(null);
   const[userPrefilled,setUserPrefilled]=useState(false);
   const[isRefining,setIsRefining]=useState(false);
-  const[currentBenefit,setCurrentBenefit]=useState<SupermarketBenefitInput|null>(null);
+  const[selectedSupermarket,setSelectedSupermarket]=useState<Supermarket|null>(null);
  
   useEffect(()=>{
     setTimeout(()=>setVisible(true),50);
@@ -279,9 +279,9 @@ import { averageBills } from '@/lib/utils/averageBills';
         </div>
  
         {/* ── UPLOAD ── */}
-        {!currentBenefit ? (
+        {!selectedSupermarket ? (
           <div className="vw-fade">
-            <SupermarketBenefitForm onSubmit={setCurrentBenefit} isLoading={step==="comparing"} />
+            <SupermarketBenefitForm onSubmit={(data) => setSelectedSupermarket(data.supermarket)} isLoading={step==="comparing"} />
           </div>
         ) : (
           <>

@@ -11,8 +11,7 @@ export interface SupplierOffer {
   supplierEmail?: string;
   supermarketBenefit?: {
     supermarket: string;
-    cashbackPercentage?: number;
-    fixedMonthlyEur?: number;
+    cashbackPercentage: number;
   };
   estimatedMonthlyBenefit?: number;
   estimatedMonthlyEurAfterBenefit?: number;
@@ -39,30 +38,31 @@ const SUPPLIER_EMAILS: Record<string, string> = {
   "MUON":       "geral@muon.energy",
 };
 
-function calculateMonthlyBenefit(
-  supermarketBenefit?: { cashbackPercentage?: number; fixedMonthlyEur?: number; estimatedMonthlySpending?: number }
+/**
+ * Calculate monthly cashback benefit from electricity cost
+ * If user has supermarket selected and supplier has partnership:
+ * benefit = electricity_cost × cashback_percentage / 100
+ */
+function calculateBenefitFromElectricityCost(
+  electricityCost: number,
+  cashbackPercentage?: number
 ): number {
-  if (!supermarketBenefit) return 0;
-  if (supermarketBenefit.fixedMonthlyEur) {
-    return supermarketBenefit.fixedMonthlyEur;
-  }
-  if (supermarketBenefit.cashbackPercentage && supermarketBenefit.estimatedMonthlySpending) {
-    return (supermarketBenefit.estimatedMonthlySpending * supermarketBenefit.cashbackPercentage) / 100;
-  }
-  return 0;
+  if (!cashbackPercentage || cashbackPercentage <= 0) return 0;
+  return (electricityCost * cashbackPercentage) / 100;
 }
 
 function getEffectiveMonthlyEur(
   baseMonthlyEur: number,
-  supermarketBenefit?: { cashbackPercentage?: number; fixedMonthlyEur?: number; estimatedMonthlySpending?: number }
+  cashbackPercentage?: number
 ): number {
-  const benefit = calculateMonthlyBenefit(supermarketBenefit);
+  const benefit = calculateBenefitFromElectricityCost(baseMonthlyEur, cashbackPercentage);
   return Math.max(0, baseMonthlyEur - benefit);
 }
 
 export async function compareToCurrentPlan(
   config: AgentConfig,
-  appBaseUrl: string
+  appBaseUrl: string,
+  selectedSupermarket?: string
 ): Promise<ComparisonResult> {
   const res = await fetch(`${appBaseUrl}/api/compare`, {
     method: "POST",
@@ -73,7 +73,6 @@ export async function compareToCurrentPlan(
       kwhMonth:    config.currentMonthlyKwh,
       currentBill: config.currentMonthlyCost,
       tariffType:  "simple",
-      currentSupermarketBenefit: config.currentSupermarketBenefit,
     }),
   });
 
@@ -95,31 +94,31 @@ export async function compareToCurrentPlan(
         supplierEmail:       SUPPLIER_EMAILS[o.provider],
       };
 
-      try {
-        const partnership = await getSupplierPartnership(o.provider);
-        if (partnership && config.currentSupermarketBenefit?.estimatedMonthlySpending) {
-          offer.supermarketBenefit = {
-            supermarket: partnership.supermarket,
-            cashbackPercentage: partnership.cashback_percentage ?? undefined,
-            fixedMonthlyEur: partnership.fixed_monthly_eur ?? undefined,
-          };
-          offer.estimatedMonthlyBenefit = calculateMonthlyBenefit({
-            cashbackPercentage: partnership.cashback_percentage ?? undefined,
-            fixedMonthlyEur: partnership.fixed_monthly_eur ?? undefined,
-            estimatedMonthlySpending: config.currentSupermarketBenefit.estimatedMonthlySpending,
-          });
-          offer.estimatedMonthlyEurAfterBenefit = getEffectiveMonthlyEur(
-            offer.estimatedMonthlyEur,
-            {
-              cashbackPercentage: partnership.cashback_percentage ?? undefined,
-              fixedMonthlyEur: partnership.fixed_monthly_eur ?? undefined,
-              estimatedMonthlySpending: config.currentSupermarketBenefit.estimatedMonthlySpending,
-            }
-          );
-        } else {
+      // If user selected a supermarket, check for partnership
+      if (selectedSupermarket && selectedSupermarket !== 'None') {
+        try {
+          const partnership = await getSupplierPartnership(o.provider);
+          if (partnership && partnership.supermarket === selectedSupermarket) {
+            const cashback = partnership.cashback_percentage || 0;
+            offer.supermarketBenefit = {
+              supermarket: partnership.supermarket,
+              cashbackPercentage: cashback,
+            };
+            offer.estimatedMonthlyBenefit = calculateBenefitFromElectricityCost(
+              offer.estimatedMonthlyEur,
+              cashback
+            );
+            offer.estimatedMonthlyEurAfterBenefit = getEffectiveMonthlyEur(
+              offer.estimatedMonthlyEur,
+              cashback
+            );
+          } else {
+            offer.estimatedMonthlyEurAfterBenefit = offer.estimatedMonthlyEur;
+          }
+        } catch (error) {
           offer.estimatedMonthlyEurAfterBenefit = offer.estimatedMonthlyEur;
         }
-      } catch (error) {
+      } else {
         offer.estimatedMonthlyEurAfterBenefit = offer.estimatedMonthlyEur;
       }
 
@@ -136,10 +135,19 @@ export async function compareToCurrentPlan(
   const bestOffer = enrichedOffers[0];
   if (!bestOffer) throw new Error("No alternative offers found");
 
-  const currentEffectiveCost = getEffectiveMonthlyEur(
-    config.currentMonthlyCost,
-    config.currentSupermarketBenefit
-  );
+  // Calculate current effective cost with supermarket benefit
+  let currentEffectiveCost = config.currentMonthlyCost;
+  if (selectedSupermarket && selectedSupermarket !== 'None') {
+    try {
+      const currentPartnership = await getSupplierPartnership(config.currentSupplier);
+      if (currentPartnership && currentPartnership.supermarket === selectedSupermarket) {
+        const cashback = currentPartnership.cashback_percentage || 0;
+        currentEffectiveCost = getEffectiveMonthlyEur(config.currentMonthlyCost, cashback);
+      }
+    } catch (error) {
+      // Keep original cost if lookup fails
+    }
+  }
 
   const bestOfferEffectiveCost = bestOffer.estimatedMonthlyEurAfterBenefit ?? bestOffer.estimatedMonthlyEur;
   const savingsPerMonth = currentEffectiveCost - bestOfferEffectiveCost;
