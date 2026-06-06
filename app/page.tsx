@@ -1,5 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { SupermarketBenefitForm, SupermarketBenefitInput } from '@/lib/components/SupermarketBenefitForm';
+import { averageBills } from '@/lib/utils/averageBills';
 import { useRouter } from "next/navigation";
  
 type Step = "upload" | "validating" | "form" | "comparing" | "results";
