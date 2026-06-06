@@ -214,7 +214,6 @@ export default function Home(){
  
   const css=`
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
-import { SupermarketBenefitForm, SupermarketBenefitInput } from '@/lib/components/SupermarketBenefitForm';
 import { averageBills } from '@/lib/utils/averageBills';
     *{box-sizing:border-box;}
     input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;}
@@ -280,6 +279,11 @@ import { averageBills } from '@/lib/utils/averageBills';
         </div>
  
         {/* ── UPLOAD ── */}
+        {!currentBenefit ? (
+          <div className="vw-fade">
+            <SupermarketBenefitForm onSubmit={setCurrentBenefit} isLoading={step==="comparing"} />
+          </div>
+        ) : (
         {step==="upload"&&(
           <div className="vw-fade">
             {userPrefilled&&userName&&(
