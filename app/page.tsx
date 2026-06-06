@@ -284,7 +284,8 @@ import { averageBills } from '@/lib/utils/averageBills';
             <SupermarketBenefitForm onSubmit={setCurrentBenefit} isLoading={step==="comparing"} />
           </div>
         ) : (
-        {step==="upload"&&(
+          <>
+            {step==="upload"&&(
           <div className="vw-fade">
             {userPrefilled&&userName&&(
               <div style={{background:"#1a1a1a",borderRadius:16,padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
@@ -323,6 +324,8 @@ import { averageBills } from '@/lib/utils/averageBills';
               <button onClick={()=>router.push("/signup")} style={{padding:"9px 20px",background:"white",color:"#888",border:"1.5px solid #e8e6df",borderRadius:20,fontSize:13,fontWeight:500,fontFamily:"inherit",cursor:"pointer"}}>🤖 Join the monthly switching agent</button>
             </div>
           </div>
+        )}
+          </>
         )}
  
         {/* ── VALIDATING ── */}
