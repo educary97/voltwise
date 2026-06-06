@@ -21,6 +21,7 @@ export interface SupplierOffer {
 export interface ComparisonResult {
   shouldSwitch: boolean;
   currentMonthlyCost: number;
+  currentMonthlyEffectiveCost: number;
   bestOffer: SupplierOffer;
   savingsPerMonth: number;
   savingsPerYear: number;
@@ -38,9 +39,6 @@ const SUPPLIER_EMAILS: Record<string, string> = {
   "MUON":       "geral@muon.energy",
 };
 
-/**
- * Calculate estimated monthly supermarket benefit
- */
 function calculateMonthlyBenefit(
   supermarketBenefit?: { cashbackPercentage?: number; fixedMonthlyEur?: number; estimatedMonthlySpending?: number }
 ): number {
@@ -54,9 +52,6 @@ function calculateMonthlyBenefit(
   return 0;
 }
 
-/**
- * Calculate effective cost after benefits
- */
 function getEffectiveMonthlyEur(
   baseMonthlyEur: number,
   supermarketBenefit?: { cashbackPercentage?: number; fixedMonthlyEur?: number; estimatedMonthlySpending?: number }
@@ -100,7 +95,6 @@ export async function compareToCurrentPlan(
         supplierEmail:       SUPPLIER_EMAILS[o.provider],
       };
 
-      // Try to fetch partnership from Supabase
       try {
         const partnership = await getSupplierPartnership(o.provider);
         if (partnership && config.currentSupermarketBenefit?.estimatedMonthlySpending) {
@@ -126,17 +120,14 @@ export async function compareToCurrentPlan(
           offer.estimatedMonthlyEurAfterBenefit = offer.estimatedMonthlyEur;
         }
       } catch (error) {
-        // Supabase not available, use base cost
         offer.estimatedMonthlyEurAfterBenefit = offer.estimatedMonthlyEur;
       }
 
       return offer;
     });
 
-  // Wait for all offers to be enriched with partnership data
   const enrichedOffers = await Promise.all(allOffers);
 
-  // Sort by effective cost
   enrichedOffers.sort((a: SupplierOffer, b: SupplierOffer) =>
     (a.estimatedMonthlyEurAfterBenefit ?? a.estimatedMonthlyEur) -
     (b.estimatedMonthlyEurAfterBenefit ?? b.estimatedMonthlyEur)
@@ -145,7 +136,6 @@ export async function compareToCurrentPlan(
   const bestOffer = enrichedOffers[0];
   if (!bestOffer) throw new Error("No alternative offers found");
 
-  // Calculate current effective cost
   const currentEffectiveCost = getEffectiveMonthlyEur(
     config.currentMonthlyCost,
     config.currentSupermarketBenefit
@@ -158,7 +148,8 @@ export async function compareToCurrentPlan(
 
   return {
     shouldSwitch,
-    currentMonthlyCost: currentEffectiveCost,
+    currentMonthlyCost: config.currentMonthlyCost,
+    currentMonthlyEffectiveCost: currentEffectiveCost,
     bestOffer,
     savingsPerMonth,
     savingsPerYear,
